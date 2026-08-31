@@ -1,0 +1,6 @@
+{
+  "name": "GameHost Deployer",
+  "description": "One-click deployment manager for game servers with automated subdomain routing and reverse proxy setup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
