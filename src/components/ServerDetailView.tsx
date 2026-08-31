@@ -113,12 +113,21 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   };
 
   const handleSaveConfig = (newContent: string) => {
+    fetch(`/api/servers/${server.id}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: server.activeConfigFile,
+        content: newContent
+      })
+    }).catch(() => {});
+
     const updated: DeployedServer = {
       ...server,
       configContent: newContent,
       logs: [
         ...server.logs,
-        { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'SYSTEM', message: `Updated configuration file ${server.activeConfigFile}` }
+        { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'SYSTEM', message: `Saved configuration file ${server.activeConfigFile} to disk volume.` }
       ]
     };
     onUpdateServer(updated);

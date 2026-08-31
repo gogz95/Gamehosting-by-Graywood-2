@@ -1,7 +1,29 @@
 import os from 'os';
 import http from 'http';
+import path from 'path';
+import fs from 'fs';
 import { WebSocket } from 'ws';
 import Docker from 'dockerode';
+
+function getContainerDataPath(gameId?: string): string {
+  const g = (gameId || '').toLowerCase();
+  if (g.includes('minecraft')) return '/data';
+  if (g.includes('satisfactory')) return '/config';
+  if (g.includes('valheim')) return '/config';
+  if (g.includes('palworld')) return '/palworld';
+  if (g.includes('rust')) return '/steamcmd/rust';
+  if (g.includes('terraria')) return '/root/.local/share/Terraria';
+  if (g.includes('ark')) return '/ark';
+  if (g.includes('zomboid')) return '/home/steam/Zomboid';
+  if (g.includes('factorio')) return '/factorio';
+  if (g.includes('cs2') || g.includes('counterstrike')) return '/home/steam/cs2-dedicated';
+  if (g.includes('enshrouded')) return '/home/steam/enshrouded';
+  if (g.includes('7dtd') || g.includes('7days')) return '/home/steam/7dtd-dedicated';
+  if (g.includes('vrising')) return '/mnt/vrising/server';
+  if (g.includes('forest') || g.includes('sotf')) return '/winedata';
+  if (g.includes('gmod') || g.includes('garry')) return '/home/steam/gmod-dedicated';
+  return '/data';
+}
 
 // CLI / Environment Configuration
 const args = process.argv.slice(2);
@@ -191,14 +213,23 @@ async function startAgent() {
               portBindings[portKey] = [{ HostPort: String(payload.port || 25565) }];
               const envArray = Object.entries(payload.envVars || {}).map(([k, v]) => `${k}=${v}`);
 
+              const cleanName = (payload.serverName || 'server').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+              const containerName = `gamehost-${cleanName}-${Date.now().toString(36)}`;
+              const hostVolumeDir = path.resolve(process.cwd(), 'data', 'volumes', containerName);
+              if (!fs.existsSync(hostVolumeDir)) {
+                fs.mkdirSync(hostVolumeDir, { recursive: true });
+              }
+              const containerDataPath = getContainerDataPath(payload.gameId);
+
               const container = await docker.createContainer({
                 Image: payload.dockerImage,
-                name: `gamehost-${(payload.serverName || 'server').toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${Date.now().toString(36)}`,
+                name: containerName,
                 Env: envArray,
                 Labels: { app: 'gamehost', gameId: payload.gameId || 'game' },
                 ExposedPorts: { [portKey]: {} },
                 HostConfig: {
                   PortBindings: portBindings,
+                  Binds: [`${hostVolumeDir}:${containerDataPath}`],
                   Memory: (payload.ramGb || 4) * 1024 * 1024 * 1024,
                   NanoCpus: (payload.cpuCores || 2) * 1e9,
                   RestartPolicy: { Name: 'unless-stopped' }

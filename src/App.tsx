@@ -26,6 +26,27 @@ export default function App() {
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [preselectedGame, setPreselectedGame] = useState<GameTemplate | null>(null);
 
+  // Initial fetch of persistent cluster state from backend database
+  useEffect(() => {
+    fetch('/api/servers')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.servers && Array.isArray(data.servers) && data.servers.length > 0) {
+          setServers(data.servers);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/proxies')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
+          setProxyRules(data.rules);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Sync live connected agent nodes from master gateway
   useEffect(() => {
     const fetchLiveNodes = () => {
@@ -59,6 +80,14 @@ export default function App() {
     setDeployModalOpen(true);
   };
 
+  const syncServerUpdate = (updatedServer: DeployedServer) => {
+    fetch(`/api/servers/${updatedServer.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedServer)
+    }).catch(() => {});
+  };
+
   const handleServerDeployed = (newServer: DeployedServer) => {
     setServers((prev) => [newServer, ...prev]);
 
@@ -81,6 +110,19 @@ export default function App() {
     };
 
     setProxyRules((prev) => [newProxyRule, ...prev]);
+
+    // Persist server and proxy to database
+    fetch('/api/servers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newServer)
+    }).catch(() => {});
+
+    fetch('/api/proxies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newProxyRule)
+    }).catch(() => {});
   };
 
   const handleToggleStatus = (serverId: string, action: 'START' | 'STOP' | 'RESTART') => {
@@ -104,7 +146,7 @@ export default function App() {
           }).catch(() => {});
         }
 
-        return {
+        const updated: DeployedServer = {
           ...s,
           status: newStatus,
           logs: [
@@ -117,6 +159,9 @@ export default function App() {
             }
           ]
         };
+
+        syncServerUpdate(updated);
+        return updated;
       })
     );
 
@@ -127,6 +172,7 @@ export default function App() {
 
   const handleUpdateServer = (updatedServer: DeployedServer) => {
     setServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
+    syncServerUpdate(updatedServer);
     if (selectedServer && selectedServer.id === updatedServer.id) {
       setSelectedServer(updatedServer);
     }
@@ -138,6 +184,7 @@ export default function App() {
     if (selectedServer && selectedServer.id === serverId) {
       setSelectedServer(null);
     }
+    fetch(`/api/servers/${serverId}`, { method: 'DELETE' }).catch(() => {});
   };
 
   const handleSelectGameForDeploy = (gameTemplate: GameTemplate) => {
@@ -157,7 +204,7 @@ export default function App() {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
-        return {
+        const updated: DeployedServer = {
           ...s,
           mods: [...s.mods, mod],
           logs: [
@@ -170,6 +217,8 @@ export default function App() {
             }
           ]
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -179,7 +228,7 @@ export default function App() {
       prev.map((s) => {
         if (s.id !== serverId) return s;
         const targetMod = s.mods.find((m) => m.id === modId);
-        return {
+        const updated: DeployedServer = {
           ...s,
           mods: s.mods.filter((m) => m.id !== modId),
           logs: [
@@ -192,6 +241,8 @@ export default function App() {
             }
           ]
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -200,10 +251,12 @@ export default function App() {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
-        return {
+        const updated: DeployedServer = {
           ...s,
           mods: s.mods.map((m) => (m.id === modId ? { ...m, enabled: !m.enabled } : m))
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -213,7 +266,7 @@ export default function App() {
       prev.map((s) => {
         if (s.id !== serverId) return s;
         const targetMod = s.mods.find((m) => m.id === modId);
-        return {
+        const updated: DeployedServer = {
           ...s,
           mods: s.mods.map((m) => (m.id === modId ? { ...m, configContent: newConfig } : m)),
           logs: [
@@ -226,6 +279,8 @@ export default function App() {
             }
           ]
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -247,7 +302,7 @@ export default function App() {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
-        return {
+        const updated: DeployedServer = {
           ...s,
           backups: [newSnapshot, ...(s.backups || [])],
           logs: [
@@ -260,6 +315,8 @@ export default function App() {
             }
           ]
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -269,7 +326,7 @@ export default function App() {
       prev.map((s) => {
         if (s.id !== serverId) return s;
         const targetSnap = (s.backups || []).find((b) => b.id === snapshotId);
-        return {
+        const updated: DeployedServer = {
           ...s,
           logs: [
             ...s.logs,
@@ -281,6 +338,8 @@ export default function App() {
             }
           ]
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };
@@ -289,10 +348,12 @@ export default function App() {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
-        return {
+        const updated: DeployedServer = {
           ...s,
           backups: (s.backups || []).filter((b) => b.id !== snapshotId)
         };
+        syncServerUpdate(updated);
+        return updated;
       })
     );
   };

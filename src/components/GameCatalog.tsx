@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Rocket, Cpu, HardDrive, ShieldCheck, Network, CheckCircle2, Gamepad2, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Rocket, Cpu, HardDrive, ShieldCheck, Network, CheckCircle2, Gamepad2, Layers, Plus, Upload, X, FileJson, AlertCircle } from 'lucide-react';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 import { GameTemplate } from '../types';
 
@@ -10,10 +10,39 @@ interface GameCatalogProps {
 export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [templates, setTemplates] = useState<GameTemplate[]>(GAME_TEMPLATES);
+
+  // Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'JSON' | 'FORM'>('JSON');
+  const [jsonInput, setJsonInput] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Quick Form State
+  const [formName, setFormName] = useState('');
+  const [formImage, setFormImage] = useState('');
+  const [formPort, setFormPort] = useState(25565);
+  const [formRam, setFormRam] = useState(4);
+  const [formCores, setFormCores] = useState(2);
+  const [formCategory, setFormCategory] = useState<'Sandbox' | 'Survival' | 'FPS' | 'Simulation'>('Sandbox');
+  const [formSubdomain, setFormSubdomain] = useState('');
+
+  // Fetch dynamic templates from backend
+  useEffect(() => {
+    fetch('/api/templates')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.templates && Array.isArray(data.templates) && data.templates.length > 0) {
+          setTemplates(data.templates);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const categories = ['All', 'Sandbox', 'Survival', 'FPS', 'Simulation'];
 
-  const filteredGames = GAME_TEMPLATES.filter((game) => {
+  const filteredGames = templates.filter((game) => {
     const matchesSearch =
       game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       game.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -24,23 +53,125 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
     return matchesSearch && matchesCategory;
   });
 
+  const handleImportJson = async () => {
+    setImportError(null);
+    if (!jsonInput.trim()) {
+      setImportError('Please enter valid JSON or Pterodactyl egg definition.');
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(jsonInput);
+      setIsSubmitting(true);
+
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed)
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to import template');
+      }
+
+      if (data.template) {
+        setTemplates((prev) => [data.template, ...prev]);
+        setIsImportModalOpen(false);
+        setJsonInput('');
+      }
+    } catch (err: any) {
+      setImportError(err.message || 'Invalid JSON format');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportError(null);
+    if (!formName || !formImage) {
+      setImportError('Server Name and Docker Image are required.');
+      return;
+    }
+
+    const newTemplate: GameTemplate = {
+      id: `custom-${formName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${Date.now().toString(36)}`,
+      name: formName,
+      gameKey: formName.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      category: formCategory,
+      description: `Custom OCI Container deployment for ${formName}`,
+      icon: 'Gamepad2',
+      banner: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+      defaultPort: Number(formPort) || 25565,
+      protocol: 'TCP',
+      defaultRamGb: Number(formRam) || 4,
+      minRamGb: 2,
+      defaultCpuCores: Number(formCores) || 2,
+      dockerImage: formImage,
+      proxyTypeDefault: 'NGINX',
+      recommendedSubdomainPrefix: formSubdomain || formName.toLowerCase().slice(0, 5),
+      configFiles: [
+        {
+          filename: 'server.properties',
+          description: 'Primary configuration',
+          defaultContent: '# Custom Server Configuration\n'
+        }
+      ],
+      defaultEnvVars: {},
+      features: ['Custom Container', 'Persistent NVMe Mount', 'Subdomain Proxy']
+    };
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTemplate)
+      });
+      const data = await res.json();
+      if (data.template) {
+        setTemplates((prev) => [data.template, ...prev]);
+        setIsImportModalOpen(false);
+        setFormName('');
+        setFormImage('');
+      }
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to save custom template');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
       <div className="bg-[#0F1117]/90 backdrop-blur-md border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 blur-[90px] rounded-full pointer-events-none" />
-        <div className="relative z-10 max-w-3xl space-y-2">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
-            <Rocket className="w-3.5 h-3.5 text-blue-400" />
-            <span>Automated Container & Subdomain Proxying</span>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="max-w-2xl space-y-2">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
+              <Rocket className="w-3.5 h-3.5 text-blue-400" />
+              <span>Automated Container & Subdomain Proxying</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Game Server Catalog & Egg Hub
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Deploy dedicated instances for Minecraft, Satisfactory, Valheim, Palworld, Rust, or import custom Pterodactyl Eggs.
+              Every launch includes automated Docker container setup, persistent NVMe storage, and instant subdomain proxy routing.
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Game Server Catalog
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-            Deploy dedicated instances for Minecraft, Satisfactory, Valheim, Palworld, Rust, and more.
-            Every launch includes automated Docker container setup, port mapping, and instant subdomain proxy routing (e.g., <code className="text-blue-300 bg-[#161922] px-2 py-0.5 rounded-lg border border-white/5 font-mono text-xs">mc.nexus-node.io</code>).
-          </p>
+
+          <div className="shrink-0">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center space-x-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-500/20 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Import Custom Egg / Game</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -171,6 +302,189 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
           </div>
         ))}
       </div>
+
+      {/* Import / Custom Egg Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0F1117] border border-white/10 rounded-3xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl">
+                  <FileJson className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Import Custom Game Template / Egg</h3>
+                  <p className="text-xs text-slate-400">Pterodactyl Egg compatible JSON or Quick Container Creator</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="flex bg-[#161922] p-1 rounded-xl border border-white/5">
+              <button
+                onClick={() => setImportMode('JSON')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                  importMode === 'JSON' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Pterodactyl Egg JSON
+              </button>
+              <button
+                onClick={() => setImportMode('FORM')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                  importMode === 'FORM' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Quick Container Form
+              </button>
+            </div>
+
+            {importError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{importError}</span>
+              </div>
+            )}
+
+            {importMode === 'JSON' ? (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Paste Egg JSON Specification</label>
+                  <textarea
+                    rows={8}
+                    value={jsonInput}
+                    onChange={(e) => setJsonInput(e.target.value)}
+                    placeholder={`{\n  "meta": { "version": "PTDL_v2" },\n  "name": "Minecraft Paper",\n  "docker_images": { "latest": "ghcr.io/pterodactyl/yolks:java_17" },\n  "variables": []\n}`}
+                    className="w-full bg-[#161922] border border-white/10 rounded-xl p-3 font-mono text-xs text-indigo-300 focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleImportJson}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Importing...' : 'Import Template'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleQuickCreate} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Server Display Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Enshrouded Dedicated"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Docker Image</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. steamcmd/enshrouded:latest"
+                      value={formImage}
+                      onChange={(e) => setFormImage(e.target.value)}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Default Port</label>
+                    <input
+                      type="number"
+                      value={formPort}
+                      onChange={(e) => setFormPort(parseInt(e.target.value, 10))}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Rec. RAM (GB)</label>
+                    <input
+                      type="number"
+                      value={formRam}
+                      onChange={(e) => setFormRam(parseInt(e.target.value, 10))}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">CPU Cores</label>
+                    <input
+                      type="number"
+                      value={formCores}
+                      onChange={(e) => setFormCores(parseInt(e.target.value, 10))}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Category</label>
+                    <select
+                      value={formCategory}
+                      onChange={(e: any) => setFormCategory(e.target.value)}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="Sandbox">Sandbox</option>
+                      <option value="Survival">Survival</option>
+                      <option value="FPS">FPS</option>
+                      <option value="Simulation">Simulation</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Subdomain Prefix</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. enshrouded"
+                      value={formSubdomain}
+                      onChange={(e) => setFormSubdomain(e.target.value)}
+                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Creating...' : 'Save Game Template'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

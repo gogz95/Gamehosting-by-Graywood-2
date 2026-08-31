@@ -183,6 +183,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
         port: selectedGame.defaultPort,
         ramGb: ramAllocatedGb,
         cpuCores: cpuAllocatedCores,
+        nodeId: selectedNode.id,
         envVars: {
           ...selectedGame.defaultEnvVars,
           MAX_PLAYERS: String(maxPlayers),

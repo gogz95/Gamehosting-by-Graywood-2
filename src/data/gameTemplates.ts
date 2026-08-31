@@ -328,5 +328,331 @@ PublicName=Project Zomboid Server
       MEMORY: '6144m'
     },
     features: ['Steam Workshop Mods', 'Custom Sandbox Presets', 'Zombie Density Scaling', 'VoIP Support']
+  },
+  {
+    id: 'cs2',
+    name: 'Counter-Strike 2 (CS2)',
+    gameKey: 'cs2',
+    category: 'FPS',
+    description: 'Premier competitive 5v5 / deathmatch dedicated server running on native Source 2 Linux engine with RCON support.',
+    icon: 'Crosshair',
+    banner: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 27015,
+    queryPort: 27015,
+    rconPort: 27015,
+    protocol: 'UDP',
+    defaultRamGb: 6,
+    minRamGb: 4,
+    defaultCpuCores: 2,
+    dockerImage: 'cm2network/cs2:latest',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'cs2',
+    configFiles: [
+      {
+        filename: 'server.cfg',
+        description: 'CS2 competitive server settings, tickrate, and rcon password',
+        defaultContent: `hostname "Nexus CS2 Dedicated Match Server"
+rcon_password "SuperAdminPass2026!"
+sv_cheats 0
+sv_lan 0
+sv_maxrate 0
+sv_minrate 786432
+mp_roundtime 1.92
+mp_maxrounds 24
+mp_autoteambalance 1
+`
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_HOSTNAME: 'Nexus CS2 Dedicated Server',
+      SERVER_PASSWORD: '',
+      RCON_PASSWORD: 'SuperAdminPass2026!',
+      GAME_TYPE: '0',
+      GAME_MODE: '1',
+      MAP: 'de_dust2',
+      MAXPLAYERS: '12'
+    },
+    features: ['Source 2 Sub-Tick Engine', '128-Tick Simulation', 'RCON Live Console', 'Workshop Map Rotation']
+  },
+  {
+    id: 'enshrouded',
+    name: 'Enshrouded Dedicated',
+    gameKey: 'enshrouded',
+    category: 'Survival',
+    description: 'Voxel action RPG survival multiplayer server supporting up to 16 players in a sprawling, fog-shrouded realm.',
+    icon: 'Flame',
+    banner: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 15636,
+    queryPort: 15637,
+    protocol: 'UDP',
+    defaultRamGb: 8,
+    minRamGb: 6,
+    defaultCpuCores: 4,
+    dockerImage: 'skaronator/enshrouded-server:latest',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'shroud',
+    configFiles: [
+      {
+        filename: 'enshrouded_server.json',
+        description: 'Enshrouded world configuration and save game settings',
+        defaultContent: `{
+  "name": "Enshrouded Sanctuary",
+  "password": "FlameSecretPassword",
+  "saveDirectory": "./savegame",
+  "logDirectory": "./logs",
+  "ip": "0.0.0.0",
+  "gamePort": 15636,
+  "queryPort": 15637,
+  "slotCount": 16
+}`
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_NAME: 'Enshrouded Realm',
+      SERVER_PASSWORD: 'FlameSecretPassword',
+      GAME_PORT: '15636',
+      QUERY_PORT: '15637',
+      SLOT_COUNT: '16'
+    },
+    features: ['16-Player Co-Op', 'Voxel Terraforming', 'Cloud Save State Sync', 'High Tickrate Network']
+  },
+  {
+    id: 'factorio',
+    name: 'Factorio Dedicated',
+    gameKey: 'factorio',
+    category: 'Simulation',
+    description: 'High-performance factory automation multiplayer server running native headless Linux binary with auto-save sync.',
+    icon: 'Cpu',
+    banner: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 34197,
+    rconPort: 27015,
+    protocol: 'UDP',
+    defaultRamGb: 4,
+    minRamGb: 2,
+    defaultCpuCores: 2,
+    dockerImage: 'factoriotools/factorio:stable',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'factory',
+    configFiles: [
+      {
+        filename: 'server-settings.json',
+        description: 'Factorio game settings, password, autosave interval and visibility',
+        defaultContent: `{
+  "name": "Nexus High-Throughput Factory",
+  "description": "Multiplayer automation megabase running on NVMe Gen4 storage.",
+  "tags": ["automation", "megabase", "high-tps"],
+  "max_players": 32,
+  "game_password": "",
+  "autosave_interval": 10,
+  "autosave_slots": 5,
+  "auto_pause": true
+}`
+      }
+    ],
+    defaultEnvVars: {
+      UPDATE_MODS_ON_START: 'true',
+      FACTORIO_PORT: '34197',
+      FACTORIO_RCON_PORT: '27015'
+    },
+    features: ['60 UPS Stable Engine', 'Auto-Pause When Empty', 'Mod Portal Auto-Sync', 'RCON Administration']
+  },
+  {
+    id: 'minecraft-bedrock',
+    name: 'Minecraft Bedrock Edition',
+    gameKey: 'bedrock',
+    category: 'Sandbox',
+    description: 'Official Mojang Bedrock server supporting cross-play across Android, iOS, Windows 10/11, Xbox, Nintendo Switch, and PS5.',
+    icon: 'Pickaxe',
+    banner: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 19132,
+    protocol: 'UDP',
+    defaultRamGb: 2,
+    minRamGb: 1,
+    defaultCpuCores: 2,
+    dockerImage: 'itzg/minecraft-bedrock-server:latest',
+    proxyTypeDefault: 'PLAYIT',
+    recommendedSubdomainPrefix: 'bedrock',
+    configFiles: [
+      {
+        filename: 'server.properties',
+        description: 'Bedrock server configuration settings',
+        defaultContent: `server-name=Nexus Bedrock Sanctuary
+gamemode=survival
+difficulty=normal
+allow-cheats=false
+max-players=20
+server-port=19132
+server-portv6=19133
+online-mode=true
+view-distance=16
+tick-distance=4
+player-idle-timeout=30
+max-threads=8
+`
+      }
+    ],
+    defaultEnvVars: {
+      EULA: 'TRUE',
+      SERVER_NAME: 'Nexus Bedrock Realm',
+      GAMEMODE: 'survival',
+      DIFFICULTY: 'normal',
+      MAX_PLAYERS: '20'
+    },
+    features: ['Full Console & Mobile Crossplay', 'Zero-Config Setup', 'Low Memory Footprint', 'Official BDS Engine']
+  },
+  {
+    id: '7dtd',
+    name: '7 Days to Die',
+    gameKey: '7dtd',
+    category: 'Survival',
+    description: 'Voxel zombie horde survival crafting dedicated server with Blood Moon waves and full Darkness Falls mod support.',
+    icon: 'Skull',
+    banner: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 26900,
+    queryPort: 26902,
+    protocol: 'BOTH',
+    defaultRamGb: 8,
+    minRamGb: 6,
+    defaultCpuCores: 4,
+    dockerImage: 'vinanrra/7dtd-server:latest',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: '7dtd',
+    configFiles: [
+      {
+        filename: 'serverconfig.xml',
+        description: '7 Days to Die XML configuration file',
+        defaultContent: `<ServerSettings>
+  <property name="ServerName" value="Nexus 7DTD Apocalypse"/>
+  <property name="ServerDescription" value="7 Days to Die survival server"/>
+  <property name="ServerPort" value="26900"/>
+  <property name="ServerVisibility" value="2"/>
+  <property name="ServerMaxPlayerCount" value="16"/>
+  <property name="GameWorld" value="Navezgane"/>
+  <property name="GameDifficulty" value="2"/>
+  <property name="BloodMoonFrequency" value="7"/>
+  <property name="BloodMoonRange" value="0"/>
+</ServerSettings>`
+      }
+    ],
+    defaultEnvVars: {
+      START_MODE: '1',
+      VERSION: 'stable'
+    },
+    features: ['Blood Moon Horde Physics', 'Modpack Ready', 'Telnet & Web Dashboard', 'Random World Gen']
+  },
+  {
+    id: 'vrising',
+    name: 'V Rising Dedicated',
+    gameKey: 'vrising',
+    category: 'Survival',
+    description: 'Gothic vampire action survival multiplayer server with customizable blood essence decay, clan bounds, and siege times.',
+    icon: 'Moon',
+    banner: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 9876,
+    queryPort: 9877,
+    protocol: 'UDP',
+    defaultRamGb: 6,
+    minRamGb: 4,
+    defaultCpuCores: 2,
+    dockerImage: 'trueosiris/vrising:latest',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'vrising',
+    configFiles: [
+      {
+        filename: 'ServerHostSettings.json',
+        description: 'V Rising server network and clan settings',
+        defaultContent: `{
+  "Name": "Nexus V Rising Vampire Realm",
+  "Description": "High speed vampire PvP/PvE multiplayer world",
+  "Port": 9876,
+  "QueryPort": 9877,
+  "MaxConnectedUsers": 20,
+  "MaxConnectedAdmins": 4,
+  "SaveName": "VampireWorld",
+  "Password": ""
+}`
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_NAME: 'V Rising Realm',
+      WORLD_NAME: 'VampireWorld'
+    },
+    features: ['Castle Siege Windows', 'Custom Blood Rates', 'PVP & PVE Modes', 'Low Latency UDP Routing']
+  },
+  {
+    id: 'sotf',
+    name: 'Sons of the Forest',
+    gameKey: 'forest',
+    category: 'Survival',
+    description: 'Cannibal survival horror multiplayer server powered by headless Wine/Proton virtualization with Steam auto-updates.',
+    icon: 'Trees',
+    banner: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 8766,
+    queryPort: 27016,
+    protocol: 'UDP',
+    defaultRamGb: 8,
+    minRamGb: 6,
+    defaultCpuCores: 4,
+    dockerImage: 'jammsen/sons-of-the-forest-dedicated-server:latest',
+    proxyTypeDefault: 'PLAYIT',
+    recommendedSubdomainPrefix: 'forest',
+    configFiles: [
+      {
+        filename: 'ownersconfig.json',
+        description: 'Server administrators SteamID64 configuration',
+        defaultContent: `{
+  "Owners": [
+    "76561198000000000"
+  ]
+}`
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_NAME: 'Sons of the Forest Island',
+      STEAM_QUERY_PORT: '27016',
+      GAME_PORT: '8766'
+    },
+    features: ['8-Player Co-Op', 'Proton Virtualized Engine', 'Automated SteamCMD Updates', 'Cave & AI Sync']
+  },
+  {
+    id: 'gmod',
+    name: "Garry's Mod (GMod)",
+    gameKey: 'gmod',
+    category: 'Sandbox',
+    description: 'Iconic Valve Source sandbox server for Trouble in Terrorist Town (TTT), Prop Hunt, DarkRP, and custom workshop collections.',
+    icon: 'Layers',
+    banner: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 27015,
+    queryPort: 27015,
+    rconPort: 27015,
+    protocol: 'UDP',
+    defaultRamGb: 4,
+    minRamGb: 2,
+    defaultCpuCores: 2,
+    dockerImage: 'cm2network/gmod:latest',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'gmod',
+    configFiles: [
+      {
+        filename: 'server.cfg',
+        description: 'Garrys Mod server rules and gamemode configuration',
+        defaultContent: `hostname "Nexus GMod Sandbox Hub"
+rcon_password "GmodSuperSecret2026!"
+sv_password ""
+sv_lan 0
+sbox_maxprops 150
+sbox_maxragdolls 10
+sbox_maxthrusters 20
+sbox_godmode 0
+`
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_HOSTNAME: 'Nexus Garrys Mod Server',
+      GAMEMODE: 'sandbox',
+      MAP: 'gm_flatgrass',
+      MAXPLAYERS: '24'
+    },
+    features: ['Steam Workshop Collections', 'TTT & Prop Hunt Ready', 'Lua Script Sandbox', 'RCON Remote Control']
   }
 ];
