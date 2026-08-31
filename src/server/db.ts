@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { DeployedServer, HostNode, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, CrashReport } from '../types';
+import { DeployedServer, HostNode, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, CrashReport, User, SafeUser, UserRole } from '../types';
 import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from '../data/initialCluster';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 
@@ -14,6 +14,7 @@ export interface ClusterDatabase {
   customTemplates: GameTemplate[];
   backups: BackupSnapshot[];
   schedules: ServerSchedule[];
+  users: User[];
   enrollmentTokens: {
     token: string;
     createdAt: number;
@@ -73,8 +74,10 @@ class DatabaseManager {
           customTemplates: Array.isArray(parsed.customTemplates) ? parsed.customTemplates : [],
           backups: Array.isArray(parsed.backups) ? parsed.backups : [],
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+          users: Array.isArray(parsed.users) ? parsed.users : [],
           enrollmentTokens: Array.isArray(parsed.enrollmentTokens) ? parsed.enrollmentTokens : []
         };
+        this.bootstrapDefaultAdmin();
         return this.cache;
       } catch (err) {
         console.warn('[Database]: Failed to parse db.json, re-initializing from defaults:', err);
@@ -91,9 +94,10 @@ class DatabaseManager {
       customTemplates: [],
       backups: [],
       schedules: [],
+      users: [],
       enrollmentTokens: []
     };
-
+    this.bootstrapDefaultAdmin();
     this.persist();
     return this.cache;
   }
@@ -328,6 +332,130 @@ class DatabaseManager {
       server.crashReports = [report, ...(server.crashReports || [])].slice(0, 20);
       this.persist();
     }
+  }
+
+  // --- Multi-User RBAC & Authentication ---
+  public hashPassword(password: string, salt: string): string {
+    return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  }
+
+  public toSafeUser(user: User): SafeUser {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      assignedServerIds: user.assignedServerIds || [],
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt
+    };
+  }
+
+  public bootstrapDefaultAdmin(): void {
+    if (!this.cache) return;
+    if (!this.cache.users || this.cache.users.length === 0) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const adminUser: User = {
+        id: 'usr-admin-master',
+        username: 'admin',
+        email: 'admin@local.cluster',
+        passwordHash: this.hashPassword('admin123', salt),
+        salt,
+        role: 'ADMIN',
+        assignedServerIds: [],
+        createdAt: new Date().toISOString()
+      };
+      this.cache.users = [adminUser];
+      this.persist();
+      console.log('[Auth]: Initial default Admin account initialized (admin / admin123)');
+    }
+  }
+
+  public getUsers(): SafeUser[] {
+    const db = this.load();
+    return db.users.map((u) => this.toSafeUser(u));
+  }
+
+  public getUserById(id: string): User | undefined {
+    const db = this.load();
+    return db.users.find((u) => u.id === id);
+  }
+
+  public getUserByUsername(username: string): User | undefined {
+    const db = this.load();
+    return db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  }
+
+  public createUser(data: {
+    username: string;
+    email?: string;
+    password: string;
+    role: UserRole;
+    assignedServerIds?: string[];
+  }): SafeUser {
+    const db = this.load();
+    const existing = db.users.find((u) => u.username.toLowerCase() === data.username.toLowerCase());
+    if (existing) {
+      throw new Error(`Username '${data.username}' is already in use.`);
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const newUser: User = {
+      id: `usr-${crypto.randomBytes(6).toString('hex')}`,
+      username: data.username.trim(),
+      email: data.email?.trim(),
+      passwordHash: this.hashPassword(data.password, salt),
+      salt,
+      role: data.role,
+      assignedServerIds: data.assignedServerIds || [],
+      createdAt: new Date().toISOString()
+    };
+
+    db.users.push(newUser);
+    this.persist();
+    return this.toSafeUser(newUser);
+  }
+
+  public updateUser(
+    id: string,
+    updates: Partial<{
+      username: string;
+      email: string;
+      role: UserRole;
+      assignedServerIds: string[];
+      password?: string;
+      lastLoginAt?: string;
+    }>
+  ): SafeUser | undefined {
+    const db = this.load();
+    const user = db.users.find((u) => u.id === id);
+    if (!user) return undefined;
+
+    if (updates.username) user.username = updates.username.trim();
+    if (updates.email !== undefined) user.email = updates.email.trim();
+    if (updates.role) user.role = updates.role;
+    if (updates.assignedServerIds) user.assignedServerIds = updates.assignedServerIds;
+    if (updates.lastLoginAt) user.lastLoginAt = updates.lastLoginAt;
+    if (updates.password) {
+      const newSalt = crypto.randomBytes(16).toString('hex');
+      user.salt = newSalt;
+      user.passwordHash = this.hashPassword(updates.password, newSalt);
+    }
+
+    this.persist();
+    return this.toSafeUser(user);
+  }
+
+  public deleteUser(id: string): boolean {
+    const db = this.load();
+    const beforeLen = db.users.length;
+    // Protect the primary admin from deletion
+    if (id === 'usr-admin-master') {
+      throw new Error('Cannot delete the root admin user.');
+    }
+    db.users = db.users.filter((u) => u.id !== id);
+    this.persist();
+    return db.users.length < beforeLen;
   }
 }
 

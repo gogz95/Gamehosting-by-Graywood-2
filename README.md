@@ -137,6 +137,18 @@ graph TD
 
 ### Installation
 
+#### Option A: 1-Click with Docker Compose (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/your-username/gamehost-deployer-proxy.git
+cd gamehost-deployer-proxy
+
+# Start master panel with Docker Compose
+docker compose up -d
+```
+The master panel will be available immediately at `http://localhost:3000`.
+
+#### Option B: Native Node.js Setup
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/your-username/gamehost-deployer-proxy.git
@@ -166,6 +178,22 @@ graph TD
 
 5. **Open your browser**:
    Navigate to `http://localhost:3000` (or `http://localhost:3001` if port 3000 is occupied).
+
+---
+
+## 🗺️ Roadmap
+
+- [x] **16 Native Game Engines**: Pre-tuned Docker templates for major multiplayer titles.
+- [x] **Subdomain & Stream Proxying**: Velocity, Caddy, NGINX Streams, Traefik, and Cloudflare Tunnel configurations.
+- [x] **Multi-Node Clustering**: Secure WebSocket enrollment daemon (`agent.ts`) for distributed worker nodes.
+- [x] **Web File Explorer**: Volume file navigation, drag-and-drop uploads, and in-place `.zip` extraction.
+- [x] **Cron Task Scheduler**: Recurring automated restarts, backups, and broadcast tasks.
+- [x] **Gemini 2.5 AI Crash Watchdog**: Stack trace analysis and auto-recovery restarts.
+- [x] **Live Modrinth Hub**: Direct REST API integration for 1-click Fabric/Paper mod downloads.
+- [x] **Multi-User RBAC**: Role-based access control with granular per-server permissions.
+- [ ] **Steam Workshop Direct Downloader**: Enter Steam Workshop Collection or Item IDs to automatically download and mount maps/addons via SteamCMD for CS2, Garry's Mod, Rust, Squad, and DayZ.
+- [ ] **Thunderstore Mod Hub**: 1-click BepInEx package installer for Valheim, Palworld, and V Rising.
+- [ ] **Dynamic Multi-Node Autoscaling**: Provision and scale cloud worker nodes dynamically on Hetzner, AWS, and DigitalOcean.
 
 ---
 

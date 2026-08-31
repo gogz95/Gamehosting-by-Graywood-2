@@ -1,16 +1,19 @@
 import React from 'react';
-import { Server, Globe, Cpu, Plus, Sparkles, Network, ShieldCheck, HardDrive, Puzzle, Database, Box } from 'lucide-react';
-import { HostNode } from '../types';
+import { Server, Globe, Cpu, Plus, Sparkles, Network, ShieldCheck, HardDrive, Puzzle, Database, Box, Users, LogIn, LogOut, Shield } from 'lucide-react';
+import { HostNode, SafeUser } from '../types';
 
 interface HeaderProps {
-  activeTab: 'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export';
-  setActiveTab: (tab: 'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export') => void;
+  activeTab: 'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export' | 'users';
+  setActiveTab: (tab: 'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export' | 'users') => void;
   onOpenDeployModal: (gameId?: string) => void;
   serverCount: number;
   runningCount: number;
   hostNodes: HostNode[];
   selectedNodeId: string;
   setSelectedNodeId: (id: string) => void;
+  currentUser: SafeUser | null;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
   hostNodes,
   selectedNodeId,
   setSelectedNodeId,
+  currentUser,
+  onOpenAuthModal,
+  onLogout,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-slate-100 sticky top-0 z-30 shadow-md">
@@ -81,8 +87,37 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Actions & User Profile */}
           <div className="flex items-center space-x-3">
+            {currentUser ? (
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 bg-[#161922] border border-white/10 rounded-xl px-3 py-1.5 text-xs">
+                  <div className="w-6 h-6 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold">
+                    {currentUser.username[0].toUpperCase()}
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <span className="block font-bold text-white leading-none">{currentUser.username}</span>
+                    <span className="text-[9px] text-purple-400 font-mono leading-none">{currentUser.role}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition cursor-pointer"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center space-x-1.5 bg-[#161922] hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5 text-blue-400" />
+                <span>Sign In</span>
+              </button>
+            )}
+
             <button
               onClick={() => onOpenDeployModal()}
               className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-lg shadow-md hover:shadow-indigo-500/25 transition duration-150 cursor-pointer"
@@ -128,19 +163,19 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Network className="w-3.5 h-3.5" />
-            <span>Subdomains & Reverse Proxies</span>
+            <span>Proxy Manager</span>
           </button>
 
           <button
             onClick={() => setActiveTab('nodes')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
               activeTab === 'nodes'
-                ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            <HardDrive className="w-3.5 h-3.5" />
-            <span>Host Nodes ({hostNodes.length})</span>
+            <Cpu className="w-3.5 h-3.5" />
+            <span>Host Nodes</span>
           </button>
 
           <button
@@ -190,6 +225,21 @@ export const Header: React.FC<HeaderProps> = ({
             <Box className="w-3.5 h-3.5 text-indigo-400" />
             <span>Executable Packager</span>
           </button>
+
+          {/* Admin Users & RBAC Tab */}
+          {currentUser?.role === 'ADMIN' && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'users'
+                  ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-purple-400" />
+              <span>Users & RBAC</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -301,3 +301,34 @@ export interface CloudflareDnsRecord {
   proxied: boolean;
   ttl: number;
 }
+
+export type UserRole = 'ADMIN' | 'SERVER_OWNER' | 'MODERATOR' | 'VIEWER';
+
+export interface User {
+  id: string;
+  username: string;
+  email?: string;
+  passwordHash: string;
+  salt: string;
+  role: UserRole;
+  assignedServerIds: string[]; // empty array = all servers for admin, or specific server IDs
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface SafeUser {
+  id: string;
+  username: string;
+  email?: string;
+  role: UserRole;
+  assignedServerIds: string[];
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface AuthSession {
+  token: string;
+  user: SafeUser;
+  expiresAt: number;
+}
+

@@ -1,6 +1,6 @@
 {
   "version": "2.5.0",
-  "updatedAt": "2026-08-31T20:26:00.000Z",
+  "updatedAt": "2026-08-31T20:37:29.100Z",
   "servers": [],
   "hostNodes": [
     {
@@ -24,13 +24,32 @@
       "sshPort": 22,
       "dockerEndpoint": "//./pipe/docker_engine",
       "region": "local-cluster-1",
-      "tags": ["Master Node", "Local Docker Engine", "Fast NVMe Storage"],
-      "publicDomains": ["localhost", "srv.playcraft.gg"]
+      "tags": [
+        "Master Node",
+        "Local Docker Engine",
+        "Fast NVMe Storage"
+      ],
+      "publicDomains": [
+        "localhost",
+        "srv.playcraft.gg"
+      ]
     }
   ],
   "proxyRules": [],
   "customTemplates": [],
   "backups": [],
   "schedules": [],
+  "users": [
+    {
+      "id": "usr-admin-master",
+      "username": "admin",
+      "email": "admin@local.cluster",
+      "passwordHash": "f8725e9ec876ff9e26268ef8eac4e00b2797a755f8e1f0fa1118705ee2e67e6e4c1a59073e1a551545006cef5f016a2454711a7d3a393fbaf364ca0cfe0e9eec",
+      "salt": "042ef206957f4ee069db499692b63bec",
+      "role": "ADMIN",
+      "assignedServerIds": [],
+      "createdAt": "2026-08-31T20:37:29.099Z"
+    }
+  ],
   "enrollmentTokens": []
 }

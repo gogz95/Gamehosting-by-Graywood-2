@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  gamehost-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gamehost-master
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount host Docker engine socket for container provisioning
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount host storage for persistent database, volumes, and backups
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - S3_ENDPOINT=${S3_ENDPOINT:-}
+      - S3_BUCKET=${S3_BUCKET:-gamehost-backups}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - DEFAULT_DISCORD_WEBHOOK_URL=${DEFAULT_DISCORD_WEBHOOK_URL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

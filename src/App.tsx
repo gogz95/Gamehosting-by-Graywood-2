@@ -10,12 +10,14 @@ import { ModManager } from './components/ModManager';
 import { BackupManager } from './components/BackupManager';
 import { ExecutablePackager } from './components/ExecutablePackager';
 import { AiTroubleshooter } from './components/AiTroubleshooter';
+import { AuthModal } from './components/AuthModal';
+import { UserManager } from './components/UserManager';
 
 import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from './data/initialCluster';
-import { DeployedServer, GameTemplate, HostNode, ModPlugin, ProxyRule, BackupSnapshot } from './types';
+import { DeployedServer, GameTemplate, HostNode, ModPlugin, ProxyRule, BackupSnapshot, SafeUser } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export'>('servers');
+  const [activeTab, setActiveTab] = useState<'servers' | 'catalog' | 'proxies' | 'nodes' | 'mods' | 'backups' | 'ai' | 'export' | 'users'>('servers');
   const [servers, setServers] = useState<DeployedServer[]>(INITIAL_DEPLOYED_SERVERS);
   const [hostNodes, setHostNodes] = useState<HostNode[]>(INITIAL_HOST_NODES);
   const [proxyRules, setProxyRules] = useState<ProxyRule[]>(INITIAL_PROXY_RULES);
@@ -25,6 +27,29 @@ export default function App() {
 
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [preselectedGame, setPreselectedGame] = useState<GameTemplate | null>(null);
+
+  // Authentication & RBAC State
+  const [currentUser, setCurrentUser] = useState<SafeUser | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Check existing session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('gh_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.authenticated && data.user) {
+            setCurrentUser(data.user);
+          } else {
+            localStorage.removeItem('gh_token');
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   // Initial fetch of persistent cluster state from backend database
   useEffect(() => {
@@ -364,12 +389,29 @@ export default function App() {
     if (data.proxyRules && data.proxyRules.length > 0) setProxyRules(data.proxyRules);
   };
 
-  const filteredServers = servers.filter((s) => {
+  const handleLogout = () => {
+    const token = localStorage.getItem('gh_token');
+    if (token) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).catch(() => {});
+    }
+    localStorage.removeItem('gh_token');
+    setCurrentUser(null);
+    setActiveTab('servers');
+  };
+
+  const visibleServers = (currentUser && currentUser.role !== 'ADMIN')
+    ? servers.filter((s) => (currentUser.assignedServerIds || []).includes(s.id))
+    : servers;
+
+  const filteredServers = visibleServers.filter((server) => {
     if (selectedNodeId === 'all') return true;
-    return s.nodeId === selectedNodeId;
+    return server.nodeId === selectedNodeId;
   });
 
-  const runningCount = servers.filter((s) => s.status === 'RUNNING').length;
+  const runningCount = visibleServers.filter((s) => s.status === 'RUNNING').length;
 
   return (
     <div className="min-h-screen bg-[#0A0B10] text-slate-100 font-sans antialiased selection:bg-blue-600 selection:text-white flex flex-col">
@@ -381,11 +423,14 @@ export default function App() {
           setActiveTab(tab);
         }}
         onOpenDeployModal={() => handleOpenDeployModal()}
-        serverCount={servers.length}
+        serverCount={visibleServers.length}
         runningCount={runningCount}
         hostNodes={hostNodes}
         selectedNodeId={selectedNodeId}
         setSelectedNodeId={setSelectedNodeId}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main View Container */}
@@ -454,6 +499,10 @@ export default function App() {
                 onImportCluster={handleImportCluster}
               />
             )}
+
+            {activeTab === 'users' && (
+              <UserManager currentUser={currentUser} servers={servers} />
+            )}
           </>
         )}
       </main>
@@ -466,6 +515,15 @@ export default function App() {
         hostNodes={hostNodes}
         existingServers={servers}
         onServerDeployed={handleServerDeployed}
+      />
+
+      {/* Authentication & Login Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onLoginSuccess={(u) => {
+          setCurrentUser(u);
+        }}
       />
 
       {/* Footer */}

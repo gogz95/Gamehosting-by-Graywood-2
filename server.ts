@@ -12,7 +12,7 @@ import { Rcon } from "rcon-ts";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
-import { HostNode, DeployedServer, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, FileItem, CrashReport, ModPlugin } from "./src/types";
+import { HostNode, DeployedServer, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, FileItem, CrashReport, ModPlugin, User, SafeUser, UserRole } from "./src/types";
 import { db } from "./src/server/db";
 
 const execAsync = promisify(exec);
@@ -150,11 +150,202 @@ app.get("/agent.ts", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Multi-User Authentication & Role-Based Access Control (RBAC)
+// ---------------------------------------------------------------------------
+const activeSessions = new Map<string, { userId: string; expiresAt: number }>();
+
+function getAuthenticatedUser(req: express.Request): SafeUser | null {
+  const authHeader = req.headers.authorization;
+  let token = "";
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7);
+  } else if (req.query.token) {
+    token = String(req.query.token);
+  }
+
+  if (!token) return null;
+  const session = activeSessions.get(token);
+  if (!session || Date.now() > session.expiresAt) {
+    if (session) activeSessions.delete(token);
+    return null;
+  }
+
+  const user = db.getUserById(session.userId);
+  return user ? db.toSafeUser(user) : null;
+}
+
+// Auth: Login
+app.post("/api/auth/login", (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password required" });
+  }
+
+  const user = db.getUserByUsername(username);
+  if (!user) {
+    return res.status(401).json({ error: "Invalid username or password" });
+  }
+
+  const hash = db.hashPassword(password, user.salt);
+  if (hash !== user.passwordHash) {
+    return res.status(401).json({ error: "Invalid username or password" });
+  }
+
+  const token = `gh_sess_${crypto.randomBytes(24).toString("hex")}`;
+  // Session valid for 7 days
+  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  activeSessions.set(token, { userId: user.id, expiresAt });
+
+  db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
+
+  res.json({
+    token,
+    user: db.toSafeUser(user),
+    expiresAt
+  });
+});
+
+// Auth: Register (Self-registration)
+app.post("/api/auth/register", (req, res) => {
+  const { username, password, email } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password required" });
+  }
+
+  try {
+    const allUsers = db.getUsers();
+    // If first user, make them ADMIN; otherwise default to SERVER_OWNER
+    const role: UserRole = allUsers.length === 0 ? "ADMIN" : "SERVER_OWNER";
+    const newUser = db.createUser({
+      username,
+      email,
+      password,
+      role,
+      assignedServerIds: []
+    });
+
+    const token = `gh_sess_${crypto.randomBytes(24).toString("hex")}`;
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    activeSessions.set(token, { userId: newUser.id, expiresAt });
+
+    res.json({
+      token,
+      user: newUser,
+      expiresAt
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Auth: Current User Session
+app.get("/api/auth/me", (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    // If no active session, but users exist, return default admin info if running locally in dev mode
+    const allUsers = db.getUsers();
+    const admin = allUsers.find((u) => u.role === "ADMIN") || allUsers[0];
+    return res.json({
+      authenticated: false,
+      user: null,
+      availableUsersCount: allUsers.length,
+      defaultAdminAvailable: !!admin
+    });
+  }
+  res.json({ authenticated: true, user });
+});
+
+// Auth: Logout
+app.post("/api/auth/logout", (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    activeSessions.delete(token);
+  }
+  res.json({ success: true });
+});
+
+// Users Management: List all users (Admin only)
+app.get("/api/users", (req, res) => {
+  const currentUser = getAuthenticatedUser(req);
+  if (currentUser && currentUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Admin privileges required to view users." });
+  }
+  res.json({ users: db.getUsers() });
+});
+
+// Users Management: Create user (Admin only)
+app.post("/api/users", (req, res) => {
+  const currentUser = getAuthenticatedUser(req);
+  if (currentUser && currentUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Admin privileges required to create users." });
+  }
+
+  const { username, password, email, role, assignedServerIds } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password required" });
+  }
+
+  try {
+    const user = db.createUser({
+      username,
+      email,
+      password,
+      role: role || "SERVER_OWNER",
+      assignedServerIds: Array.isArray(assignedServerIds) ? assignedServerIds : []
+    });
+    res.json({ user });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Users Management: Update user (Admin only)
+app.put("/api/users/:id", (req, res) => {
+  const currentUser = getAuthenticatedUser(req);
+  if (currentUser && currentUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Admin privileges required." });
+  }
+
+  try {
+    const updated = db.updateUser(req.params.id, req.body);
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json({ user: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Users Management: Delete user (Admin only)
+app.delete("/api/users/:id", (req, res) => {
+  const currentUser = getAuthenticatedUser(req);
+  if (currentUser && currentUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Admin privileges required." });
+  }
+
+  try {
+    const deleted = db.deleteUser(req.params.id);
+    res.json({ success: deleted });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // REST APIs: Persistent Servers CRUD
 // ---------------------------------------------------------------------------
 
 app.get("/api/servers", (req, res) => {
-  res.json({ count: db.getServers().length, servers: db.getServers() });
+  const currentUser = getAuthenticatedUser(req);
+  const allServers = db.getServers();
+
+  // If logged in as non-admin, only return servers assigned to this user
+  if (currentUser && currentUser.role !== "ADMIN") {
+    const allowed = allServers.filter((s) => (currentUser.assignedServerIds || []).includes(s.id));
+    return res.json({ count: allowed.length, servers: allowed });
+  }
+
+  res.json({ count: allServers.length, servers: allServers });
 });
 
 app.post("/api/servers", (req, res) => {
