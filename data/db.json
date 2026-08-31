@@ -1,0 +1,36 @@
+{
+  "version": "2.5.0",
+  "updatedAt": "2026-08-31T20:26:00.000Z",
+  "servers": [],
+  "hostNodes": [
+    {
+      "id": "node-local-master",
+      "name": "Local Host (Master Node)",
+      "ipAddress": "127.0.0.1",
+      "location": "Localhost / Primary Host",
+      "countryCode": "US",
+      "status": "ONLINE",
+      "cpuUsagePct": 12,
+      "ramUsagePct": 24,
+      "totalRamGb": 64,
+      "usedRamGb": 15.4,
+      "totalDiskGb": 1000,
+      "usedDiskGb": 280,
+      "dockerVersion": "Docker Engine (Local Socket)",
+      "activeContainers": 0,
+      "provider": "Local Machine / Dedicated Bare Metal",
+      "cpuModel": "Host CPU (Multi-Core)",
+      "cpuCores": 16,
+      "sshPort": 22,
+      "dockerEndpoint": "//./pipe/docker_engine",
+      "region": "local-cluster-1",
+      "tags": ["Master Node", "Local Docker Engine", "Fast NVMe Storage"],
+      "publicDomains": ["localhost", "srv.playcraft.gg"]
+    }
+  ],
+  "proxyRules": [],
+  "customTemplates": [],
+  "backups": [],
+  "schedules": [],
+  "enrollmentTokens": []
+}

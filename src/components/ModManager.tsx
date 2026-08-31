@@ -32,173 +32,7 @@ export interface ModManagerProps {
   onUpdateModConfig?: (serverId: string, modId: string, newConfig: string) => void;
 }
 
-// Curated Online Mod Repositories Mock Database
-const MOCK_ONLINE_MOD_HUB: Record<string, ModPlugin[]> = {
-  'minecraft-java': [
-    {
-      id: 'hub-mc-1',
-      gameId: 'minecraft-java',
-      name: 'Lithium (Optimization)',
-      version: '0.12.1',
-      author: 'CaffeineMC',
-      description: 'General-purpose optimization mod for Fabric/Paper server chunk ticking, entity AI, and physics.',
-      category: 'Performance',
-      enabled: true,
-      downloads: '14.2M',
-      updatedAt: '2026-07-28',
-      fileName: 'lithium-fabric-0.12.1.jar',
-      fileSizeMb: 1.8,
-      source: 'MOD_HUB',
-      downloadUrl: 'https://modrinth.com/mod/lithium',
-      configFilename: 'config/lithium.properties',
-      configContent: '# Lithium Performance Tuning\nchunk_ticking.enabled=true\nentity_ai_optimization=true\nmath_fast_math=true'
-    },
-    {
-      id: 'hub-mc-2',
-      gameId: 'minecraft-java',
-      name: 'LuckPerms',
-      version: '5.4.102',
-      author: 'Luck',
-      description: 'Advanced permissions management plugin with web editor, MySQL/SQLite support, and rank hierarchies.',
-      category: 'Admin',
-      enabled: true,
-      downloads: '18.9M',
-      updatedAt: '2026-08-01',
-      fileName: 'LuckPerms-Bukkit-5.4.102.jar',
-      fileSizeMb: 3.2,
-      source: 'MOD_HUB',
-      downloadUrl: 'https://modrinth.com/plugin/luckperms',
-      configFilename: 'plugins/LuckPerms/config.yml',
-      configContent: 'storage-method: h2\nserver: survival-smp\nprimary-group: default'
-    },
-    {
-      id: 'hub-mc-3',
-      gameId: 'minecraft-java',
-      name: 'CoreProtect',
-      version: '22.2',
-      author: 'PlayPro',
-      description: 'Fast, efficient block logging and grief rollback inspector for server admins.',
-      category: 'Admin',
-      enabled: true,
-      downloads: '9.4M',
-      updatedAt: '2026-06-15',
-      fileName: 'CoreProtect-v22.2.jar',
-      fileSizeMb: 2.4,
-      source: 'MOD_HUB',
-      downloadUrl: 'https://spigotmc.org/resources/coreprotect.8631/'
-    },
-    {
-      id: 'hub-mc-4',
-      gameId: 'minecraft-java',
-      name: 'Dynmap (Web Live Map)',
-      version: '3.7.0',
-      author: 'mikeprimm',
-      description: 'Renders a real-time 3D web map of your Minecraft world accessible in any browser.',
-      category: 'Utility',
-      enabled: true,
-      downloads: '11.5M',
-      updatedAt: '2026-07-02',
-      fileName: 'Dynmap-3.7.0-spigot.jar',
-      fileSizeMb: 14.5,
-      source: 'MOD_HUB'
-    },
-    {
-      id: 'hub-mc-5',
-      gameId: 'minecraft-java',
-      name: 'Spark Profiler',
-      version: '1.10.53',
-      author: 'lucko',
-      description: 'Performance profiler tool for inspecting server lag, CPU thread usage, and memory heap dumps.',
-      category: 'Performance',
-      enabled: true,
-      downloads: '6.1M',
-      updatedAt: '2026-08-05',
-      fileName: 'spark-paper-1.10.53.jar',
-      fileSizeMb: 2.1,
-      source: 'MOD_HUB'
-    }
-  ],
-  'valheim': [
-    {
-      id: 'hub-vh-1',
-      gameId: 'valheim',
-      name: 'ValheimPlus',
-      version: '0.9.9.11',
-      author: 'Grantapher',
-      description: 'Comprehensive quality of life overhaul: stamina modifications, inventory sizing, build speeds, and server configs.',
-      category: 'Gameplay',
-      enabled: true,
-      downloads: '2.8M',
-      updatedAt: '2026-06-20',
-      fileName: 'ValheimPlus.dll',
-      fileSizeMb: 4.1,
-      source: 'MOD_HUB',
-      downloadUrl: 'https://valheim.thunderstore.io/package/ValheimPlus/'
-    },
-    {
-      id: 'hub-vh-2',
-      gameId: 'valheim',
-      name: 'CraftFromContainers',
-      version: '3.4.0',
-      author: 'aedenthorn',
-      description: 'Allows craft stations to pull resources directly from nearby chests automatically.',
-      category: 'Utility',
-      enabled: true,
-      downloads: '1.9M',
-      updatedAt: '2026-07-11',
-      fileName: 'CraftFromContainers.dll',
-      fileSizeMb: 0.8,
-      source: 'MOD_HUB'
-    },
-    {
-      id: 'hub-vh-3',
-      gameId: 'valheim',
-      name: 'ServerSync',
-      version: '1.15.0',
-      author: 'Smoothbrain',
-      description: 'Enforces server configuration settings on all connecting clients to prevent cheating.',
-      category: 'Core',
-      enabled: true,
-      downloads: '3.4M',
-      updatedAt: '2026-07-29',
-      fileName: 'ServerSync.dll',
-      fileSizeMb: 0.5,
-      source: 'MOD_HUB'
-    }
-  ],
-  'satisfactory': [
-    {
-      id: 'hub-sat-1',
-      gameId: 'satisfactory',
-      name: 'Refined Power',
-      version: '3.2.1',
-      author: 'I3RO',
-      description: 'Adds custom power generation: Wind Turbines, Solar Panels, Water Turbines, and Modular Reactors.',
-      category: 'Gameplay',
-      enabled: true,
-      downloads: '850K',
-      updatedAt: '2026-06-18',
-      fileName: 'RefinedPower.smod',
-      fileSizeMb: 12.4,
-      source: 'MOD_HUB'
-    },
-    {
-      id: 'hub-sat-2',
-      gameId: 'satisfactory',
-      name: 'Efficiency Checker Plus',
-      version: '2.1.0',
-      author: 'KittenBiting',
-      description: 'Handheld tool and buildable monitor to check exact item throughput rates on conveyor belts.',
-      category: 'Utility',
-      enabled: true,
-      downloads: '620K',
-      updatedAt: '2026-07-04',
-      fileName: 'EfficiencyChecker.smod',
-      fileSizeMb: 3.8,
-      source: 'MOD_HUB'
-    }
-  ]
-};
+
 
 export const ModManager: React.FC<ModManagerProps> = ({
   servers,
@@ -224,7 +58,6 @@ export const ModManager: React.FC<ModManagerProps> = ({
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
   // Live Modrinth API Hub State
-  const [isLiveModrinth, setIsLiveModrinth] = useState(false);
   const [modrinthHits, setModrinthHits] = useState<any[]>([]);
   const [modrinthLoading, setModrinthLoading] = useState(false);
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
@@ -254,13 +87,12 @@ export const ModManager: React.FC<ModManagerProps> = ({
   };
 
   const currentServerMods = currentServer?.mods || [];
-  const onlineCatalog = currentServer ? (MOCK_ONLINE_MOD_HUB[currentServer.gameId] || MOCK_ONLINE_MOD_HUB['minecraft-java'] || []) : [];
 
-  const filteredOnlineMods = onlineCatalog.filter((m) => {
-    const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'ALL' || m.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  useEffect(() => {
+    if (activeTab === 'SEARCH_HUB' && modrinthHits.length === 0) {
+      searchModrinth();
+    }
+  }, [activeTab]);
 
   const searchModrinth = (q: string = searchTerm) => {
     setModrinthLoading(true);
@@ -563,174 +395,88 @@ export const ModManager: React.FC<ModManagerProps> = ({
         </div>
       )}
 
-      {/* TAB 2: ONLINE MOD REPOSITORY (SELF DOWNLOAD) */}
+      {/* TAB 2: ONLINE MOD REPOSITORY (LIVE MODRINTH API) */}
       {activeTab === 'SEARCH_HUB' && (
         <div className="space-y-6">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center space-x-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder={isLiveModrinth ? "Search live Modrinth API (e.g. Lithium, Chunky)..." : `Search ${currentServer?.gameName} mods...`}
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    if (isLiveModrinth) searchModrinth(e.target.value);
-                  }}
-                  className="w-full bg-[#0F1117] border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition"
-                />
-              </div>
-
-              <button
-                onClick={() => {
-                  const next = !isLiveModrinth;
-                  setIsLiveModrinth(next);
-                  if (next) searchModrinth();
+            <div className="relative flex-1 sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder={`Search live Modrinth API (e.g. Lithium, Chunky, EssentialsX)...`}
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  searchModrinth(e.target.value);
                 }}
-                className={`flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                  isLiveModrinth
-                    ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                    : 'bg-[#0F1117] text-slate-400 hover:text-white border border-white/5'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-                <span>{isLiveModrinth ? 'Modrinth API Active' : 'Live Modrinth Hub'}</span>
-              </button>
+                className="w-full bg-[#0F1117] border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition"
+              />
             </div>
 
-            {!isLiveModrinth && (
-              <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto">
-                {['ALL', 'Performance', 'Admin', 'Gameplay', 'Utility'].map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                      selectedCategory === cat
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-[#0F1117] text-slate-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold rounded-xl flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Modrinth REST API Live</span>
+              </span>
+            </div>
           </div>
 
           {/* Cards Grid */}
-          {isLiveModrinth ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
-                <span>Modrinth REST API • Showing {modrinthHits.length} verified packages</span>
-                {modrinthLoading && <span className="text-emerald-400 animate-pulse">Fetching from Modrinth...</span>}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {modrinthHits.map((hit: any) => {
-                  const isInstalled = currentServerMods.some((m) => m.name.toLowerCase() === hit.title.toLowerCase());
-                  const isInstalling = installingSlug === hit.slug;
-
-                  return (
-                    <div
-                      key={hit.project_id || hit.slug}
-                      className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 hover:border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 transition"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start space-x-3">
-                            {hit.icon_url && (
-                              <img src={hit.icon_url} alt="" className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 shrink-0" />
-                            )}
-                            <div>
-                              <h4 className="font-extrabold text-white text-base">{hit.title}</h4>
-                              <span className="text-[11px] text-slate-400">By {hit.author} • {Number(hit.downloads).toLocaleString()} downloads</span>
-                            </div>
-                          </div>
-                          <span className="px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg uppercase tracking-wider">
-                            {hit.categories?.[0] || 'Mod'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">{hit.description}</p>
-                      </div>
-
-                      <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                        <span className="text-[11px] font-mono text-slate-500">{hit.client_side === 'required' ? 'Client/Server' : 'Server-Ready'}</span>
-                        <button
-                          disabled={isInstalled || isInstalling}
-                          onClick={() => handleInstallFromModrinth(hit)}
-                          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                            isInstalled
-                              ? 'bg-white/5 text-slate-500 cursor-not-allowed'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                          }`}
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>{isInstalled ? 'Installed' : isInstalling ? 'Downloading .jar...' : '1-Click Install'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
+              <span>Showing {modrinthHits.length} verified community packages</span>
+              {modrinthLoading && <span className="text-emerald-400 animate-pulse">Fetching from Modrinth...</span>}
             </div>
-          ) : (
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredOnlineMods.map((mod) => {
-                const isAlreadyInstalled = currentServerMods.some((m) => m.name.toLowerCase() === mod.name.toLowerCase());
+              {modrinthHits.map((hit: any) => {
+                const isInstalled = currentServerMods.some((m) => m.name.toLowerCase() === hit.title.toLowerCase());
+                const isInstalling = installingSlug === hit.slug;
+
                 return (
                   <div
-                    key={mod.id}
-                    className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4"
+                    key={hit.project_id || hit.slug}
+                    className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 hover:border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 transition"
                   >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h4 className="font-extrabold text-white text-base">{mod.name}</h4>
-                          <span className="text-[10px] font-mono font-bold bg-[#161922] text-blue-400 px-2 py-0.5 rounded-md border border-white/5">
-                            v{mod.version}
-                          </span>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start space-x-3">
+                          {hit.icon_url && (
+                            <img src={hit.icon_url} alt="" className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 shrink-0" />
+                          )}
+                          <div>
+                            <h4 className="font-extrabold text-white text-base">{hit.title}</h4>
+                            <span className="text-[11px] text-slate-400">By {hit.author} • {Number(hit.downloads).toLocaleString()} downloads</span>
+                          </div>
                         </div>
-                        <span className="text-[11px] text-slate-400">By {mod.author} • {mod.downloads} downloads</span>
+                        <span className="px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                          {hit.categories?.[0] || 'Mod'}
+                        </span>
                       </div>
-                      <span className="px-2.5 py-1 bg-blue-600/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold rounded-lg uppercase tracking-wider">
-                        {mod.category}
-                      </span>
+                      <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">{hit.description}</p>
                     </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {mod.description}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-white/5 text-xs">
-                    <div className="flex items-center space-x-2 text-[11px] text-slate-400">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Direct Server Auto-Download</span>
-                    </div>
-
-                    {isAlreadyInstalled ? (
-                      <span className="inline-flex items-center space-x-1 px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Installed</span>
-                      </span>
-                    ) : (
+                    <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                      <span className="text-[11px] font-mono text-slate-500">{hit.client_side === 'required' ? 'Client/Server' : 'Server-Ready'}</span>
                       <button
-                        onClick={() => handleStartSelfDownload(mod)}
-                        className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-[0_0_15px_rgba(37,99,235,0.3)] transition cursor-pointer"
+                        disabled={isInstalled || isInstalling}
+                        onClick={() => handleInstallFromModrinth(hit)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          isInstalled
+                            ? 'bg-white/5 text-slate-500 cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                        }`}
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>1-Click Self Download</span>
+                        <span>{isInstalled ? 'Installed' : isInstalling ? 'Downloading .jar...' : '1-Click Install'}</span>
                       </button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-          )}
         </div>
       )}
 
@@ -744,10 +490,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(MOCK_ONLINE_MOD_HUB['minecraft-java'] || []).map((mod) => {
-              const isInstalled = currentServerMods.some((m) => m.name.toLowerCase() === mod.name.toLowerCase());
-              return (
+          {currentServerMods.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {currentServerMods.map((mod) => (
                 <div
                   key={mod.id}
                   className="bg-[#0F1117]/80 border border-white/5 rounded-2xl p-5 shadow-xl flex items-center justify-between gap-4"
@@ -755,25 +500,19 @@ export const ModManager: React.FC<ModManagerProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
                       <h4 className="font-extrabold text-white text-sm">{mod.name}</h4>
-                      <span className="text-[10px] text-slate-400 font-mono">({mod.fileName})</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({mod.fileName || 'active'})</span>
                     </div>
                     <p className="text-xs text-slate-400 line-clamp-1">{mod.description}</p>
                   </div>
-
-                  {isInstalled ? (
-                    <span className="text-emerald-400 text-xs font-bold shrink-0">Active</span>
-                  ) : (
-                    <button
-                      onClick={() => onInstallMod(currentServer.id, { ...mod, id: `preloaded-${Date.now()}` })}
-                      className="bg-[#161922] hover:bg-white/10 border border-white/10 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0"
-                    >
-                      Load Mod
-                    </button>
-                  )}
+                  <span className="text-emerald-400 text-xs font-bold shrink-0">Installed</span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-[#0F1117] border border-white/5 rounded-2xl text-xs text-slate-500">
+              No pre-loaded mods found in server image. You can install mods directly from the Online Mod Repository tab or drag & drop files in the Upload tab.
+            </div>
+          )}
         </div>
       )}
 

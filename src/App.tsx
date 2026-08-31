@@ -11,7 +11,7 @@ import { BackupManager } from './components/BackupManager';
 import { ExecutablePackager } from './components/ExecutablePackager';
 import { AiTroubleshooter } from './components/AiTroubleshooter';
 
-import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from './data/mockServers';
+import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from './data/initialCluster';
 import { DeployedServer, GameTemplate, HostNode, ModPlugin, ProxyRule, BackupSnapshot } from './types';
 
 export default function App() {

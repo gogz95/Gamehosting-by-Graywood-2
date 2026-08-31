@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { DeployedServer, HostNode, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, CrashReport } from '../types';
-import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from '../data/mockServers';
+import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from '../data/initialCluster';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 
 export interface ClusterDatabase {

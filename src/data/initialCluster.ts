@@ -1,4 +1,4 @@
-import { DeployedServer, HostNode, ProxyRule } from '../types';
+import { HostNode, DeployedServer, ProxyRule } from '../types';
 
 export const INITIAL_HOST_NODES: HostNode[] = [
   {
