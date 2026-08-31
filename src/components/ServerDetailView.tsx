@@ -43,6 +43,18 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
       newLogMsg = 'Server restarted. All memory pools cleared.';
     }
 
+    if (server.dockerContainerId) {
+      fetch('/api/docker/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          containerId: server.dockerContainerId,
+          action,
+          nodeId: server.nodeId
+        })
+      }).catch(() => {});
+    }
+
     const updated: DeployedServer = {
       ...server,
       status: newStatus,

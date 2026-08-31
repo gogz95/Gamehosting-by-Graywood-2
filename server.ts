@@ -534,8 +534,10 @@ app.post("/api/backups/upload", async (req, res) => {
       });
 
       const sampleArchiveBuffer = Buffer.from(`GameHost AES-256 Encrypted Save State: ${serverName} (${new Date().toISOString()})`);
-      const cipher = crypto.createCipheriv("aes-256-cbc", crypto.randomBytes(32), crypto.randomBytes(16));
-      const encryptedData = Buffer.concat([cipher.update(sampleArchiveBuffer), cipher.final()]);
+      const key = crypto.randomBytes(32);
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+      const encryptedData = Buffer.concat([cipher.update(sampleArchiveBuffer), cipher.final(), cipher.getAuthTag()]);
 
       await s3.send(new PutObjectCommand({
         Bucket: bucketName,

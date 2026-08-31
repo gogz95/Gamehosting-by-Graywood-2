@@ -92,6 +92,18 @@ export default function App() {
         if (action === 'STOP') newStatus = 'STOPPED';
         if (action === 'RESTART') newStatus = 'RUNNING';
 
+        if (s.dockerContainerId) {
+          fetch('/api/docker/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              containerId: s.dockerContainerId,
+              action,
+              nodeId: s.nodeId
+            })
+          }).catch(() => {});
+        }
+
         return {
           ...s,
           status: newStatus,

@@ -15,9 +15,10 @@ export function generateProxyConfig(
   targetPort: number,
   protocol: ProtocolType,
   engine: ProxyEngine,
-  gameKey: string
+  gameKey: string = 'game'
 ): ProxyConfigResult {
   const fullDomain = `${subdomain}.${baseDomain}`;
+  const gameTag = gameKey ? gameKey.toUpperCase() : 'GAME';
 
   if (engine === 'VELOCITY') {
     return {
@@ -50,7 +51,7 @@ forwarding-secret-file = "forwarding.secret"
     return {
       engine: 'CADDY',
       filename: 'Caddyfile',
-      configText: `# Caddyfile reverse proxy for ${fullDomain}
+      configText: `# Caddyfile reverse proxy for ${gameTag} on ${fullDomain}
 # Caddy automatically provisions Let's Encrypt SSL/TLS certificates
 
 ${fullDomain} {

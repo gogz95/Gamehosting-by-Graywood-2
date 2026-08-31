@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Database, 
   ShieldCheck, 
@@ -115,8 +115,17 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState(0);
 
-  // Filtered Snapshots
-  const allSnapshots: (BackupSnapshot & { serverName: string })[] = [];
+  // Timers cleanup ref
+  const backupTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  useEffect(() => {
+    return () => {
+      backupTimersRef.current.forEach(clearTimeout);
+      backupTimersRef.current = [];
+    };
+  }, []);
+
+  const allSnapshots: (BackupSnapshot & { serverName?: string })[] = [];
   servers.forEach((s) => {
     (s.backups || []).forEach((b) => {
       allSnapshots.push({
@@ -138,17 +147,20 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     e.preventDefault();
     if (!snapshotServerId) return;
 
+    backupTimersRef.current.forEach(clearTimeout);
+    backupTimersRef.current = [];
+
     setIsCapturing(true);
     setCaptureProgress(10);
     setCaptureStage('Freezing world thread & pausing autosave...');
 
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       setCaptureProgress(35);
       setCaptureStage('Packing save files into TAR.GZ archive...');
-      setTimeout(() => {
+      const t2 = setTimeout(() => {
         setCaptureProgress(70);
         setCaptureStage('Encrypting payload with AES-256-GCM key...');
-        setTimeout(() => {
+        const t3 = setTimeout(() => {
           setCaptureProgress(95);
           setCaptureStage('Streaming encrypted blob to S3 Bucket...');
 
@@ -163,7 +175,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
             })
           }).catch(() => {});
 
-          setTimeout(() => {
+          const t4 = setTimeout(() => {
             setCaptureProgress(100);
             const name = snapshotCustomName || `${targetServer?.gameId || 'game'}-manual-save-${Date.now().toString(36)}.tar.gz`;
             onTakeSnapshot(snapshotServerId, name);
@@ -172,9 +184,13 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
             setSnapshotCustomName('');
             setCaptureProgress(0);
           }, 600);
+          backupTimersRef.current.push(t4);
         }, 600);
+        backupTimersRef.current.push(t3);
       }, 700);
+      backupTimersRef.current.push(t2);
     }, 600);
+    backupTimersRef.current.push(t1);
   };
 
   // Trigger Restore simulation
@@ -183,18 +199,21 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     setIsRestoring(true);
     setRestoreProgress(20);
 
-    setTimeout(() => {
+    const r1 = setTimeout(() => {
       setRestoreProgress(60);
-      setTimeout(() => {
+      const r2 = setTimeout(() => {
         setRestoreProgress(100);
-        setTimeout(() => {
+        const r3 = setTimeout(() => {
           onRestoreSnapshot(restoringSnapshot.serverId, restoringSnapshot.snapshot.id);
           setIsRestoring(false);
           setRestoringSnapshot(null);
           setRestoreProgress(0);
         }, 500);
+        backupTimersRef.current.push(r3);
       }, 700);
+      backupTimersRef.current.push(r2);
     }, 700);
+    backupTimersRef.current.push(r1);
   };
 
   // Toggle Schedule
