@@ -3,7 +3,7 @@ import { Play, Square, RefreshCw, Terminal, Users, Network, FileText, Package, D
 import { DeployedServer, LogEntry, ModPlugin } from '../types';
 import { ConsoleTerminal } from './ConsoleTerminal';
 import { ConfigEditor } from './ConfigEditor';
-import { ModsManager } from './ModsManager';
+import { ModManager } from './ModManager';
 import { generateProxyConfig } from '../utils/proxyGenerator';
 
 interface ServerDetailViewProps {
@@ -62,14 +62,36 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
       message: `> ${cmd}`
     };
 
-    let replyLog: LogEntry | null = null;
+    const trimmed = cmd.trim().toLowerCase();
+    let replyMsg = `[Server]: Command executed (${cmd})`;
+
     if (cmd.startsWith('op ')) {
-      replyLog = { id: (Date.now() + 1).toString(), timestamp: new Date().toLocaleTimeString(), level: 'INFO', message: `[Server]: Made ${cmd.split(' ')[1]} a server operator` };
-    } else if (cmd === 'save-all') {
-      replyLog = { id: (Date.now() + 1).toString(), timestamp: new Date().toLocaleTimeString(), level: 'INFO', message: '[Server]: Saved the world data to disk' };
-    } else {
-      replyLog = { id: (Date.now() + 1).toString(), timestamp: new Date().toLocaleTimeString(), level: 'INFO', message: `[Server]: Command executed (${cmd})` };
+      replyMsg = `[Server]: Made ${cmd.split(' ')[1]} a server operator`;
+    } else if (cmd.startsWith('kick ')) {
+      replyMsg = `[Server]: Kicked player ${cmd.split(' ')[1] || 'target'}`;
+    } else if (cmd.startsWith('say ')) {
+      replyMsg = `[Server Broadcast]: ${cmd.slice(4)}`;
+    } else if (trimmed === 'save-all') {
+      replyMsg = '[Server]: Saved the world data to NVMe storage';
+    } else if (trimmed === 'tps') {
+      replyMsg = '[Server]: TPS = 20.0 (1m: 20.0, 5m: 19.98, 15m: 20.0) — Tick health 100% optimal';
+    } else if (trimmed === 'status') {
+      replyMsg = `[Server]: Status: ${server.status} | Players: ${server.currentPlayers}/${server.maxPlayers} | Memory: ${((server.ramAllocatedGb * server.ramUsagePct) / 100).toFixed(1)}GB/${server.ramAllocatedGb}GB`;
+    } else if (trimmed === 'seed') {
+      replyMsg = '[Server]: World Seed: [-582910482910481029] (Biome: Highlands & Ocean)';
+    } else if (trimmed === 'list') {
+      const playerNames = server.playersList.map((p) => p.username).join(', ') || 'No players currently connected';
+      replyMsg = `[Server]: There are ${server.currentPlayers}/${server.maxPlayers} online: ${playerNames}`;
+    } else if (trimmed.includes('time set')) {
+      replyMsg = `[Server]: Set world time to ${cmd.split(' ')[2] || 'day'}`;
     }
+
+    const replyLog: LogEntry = {
+      id: (Date.now() + 1).toString(),
+      timestamp: new Date().toLocaleTimeString(),
+      level: 'INFO',
+      message: replyMsg
+    };
 
     const updated: DeployedServer = {
       ...server,
@@ -90,15 +112,24 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
     onUpdateServer(updated);
   };
 
-  const handleToggleMod = (modId: string) => {
+  const handleToggleMod = (_serverId: string, modId: string) => {
     const updatedMods = server.mods.map((m) => (m.id === modId ? { ...m, enabled: !m.enabled } : m));
     onUpdateServer({ ...server, mods: updatedMods });
   };
 
-  const handleInstallMod = (newMod: ModPlugin) => {
-    if (!server.mods.some((m) => m.name === newMod.name)) {
+  const handleInstallMod = (_serverId: string, newMod: ModPlugin) => {
+    if (!server.mods.some((m) => m.id === newMod.id || m.name === newMod.name)) {
       onUpdateServer({ ...server, mods: [...server.mods, newMod] });
     }
+  };
+
+  const handleUninstallMod = (_serverId: string, modId: string) => {
+    onUpdateServer({ ...server, mods: server.mods.filter((m) => m.id !== modId) });
+  };
+
+  const handleUpdateModConfig = (_serverId: string, modId: string, newConfig: string) => {
+    const updatedMods = server.mods.map((m) => (m.id === modId ? { ...m, configContent: newConfig } : m));
+    onUpdateServer({ ...server, mods: updatedMods });
   };
 
   const proxyConfigSnippet = generateProxyConfig(
@@ -316,6 +347,10 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
           logs={server.logs}
           onSendCommand={handleSendCommand}
           serverName={server.name}
+          containerId={server.dockerContainerId}
+          rconPort={server.rconPort}
+          rconPassword={server.rconPassword}
+          hostIp={server.nodeIp}
         />
       )}
 
@@ -366,12 +401,17 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
       )}
 
       {activeTab === 'mods' && (
-        <ModsManager
-          mods={server.mods}
-          onToggleMod={handleToggleMod}
-          onInstallMod={handleInstallMod}
-          gameId={server.gameId}
-        />
+        <div className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 shadow-xl">
+          <ModManager
+            servers={[server]}
+            selectedServerId={server.id}
+            embedded={true}
+            onInstallMod={handleInstallMod}
+            onUninstallMod={handleUninstallMod}
+            onToggleMod={handleToggleMod}
+            onUpdateModConfig={handleUpdateModConfig}
+          />
+        </div>
       )}
 
       {activeTab === 'backups' && (

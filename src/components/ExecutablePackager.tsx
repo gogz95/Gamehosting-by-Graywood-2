@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Box, 
   Terminal, 
   Download, 
+  Upload,
   Copy, 
   Check, 
   Monitor, 
@@ -16,13 +17,79 @@ import {
   FolderArchive,
   ExternalLink,
   Info,
-  CheckCircle2
+  CheckCircle2,
+  FileJson
 } from 'lucide-react';
+import { DeployedServer, HostNode, ProxyRule } from '../types';
 
-export const ExecutablePackager: React.FC = () => {
+interface ExecutablePackagerProps {
+  servers?: DeployedServer[];
+  hostNodes?: HostNode[];
+  proxyRules?: ProxyRule[];
+  onImportCluster?: (data: { servers: DeployedServer[]; hostNodes: HostNode[]; proxyRules: ProxyRule[] }) => void;
+}
+
+export const ExecutablePackager: React.FC<ExecutablePackagerProps> = ({
+  servers = [],
+  hostNodes = [],
+  proxyRules = [],
+  onImportCluster,
+}) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [selectedOS, setSelectedOS] = useState<'BOTH' | 'WINDOWS' | 'LINUX'>('BOTH');
   const [activePlatform, setActivePlatform] = useState<'ELECTRON_EXE' | 'PKG_BINARY' | 'DOCKER_CONTAINER'>('ELECTRON_EXE');
+  const [importStatus, setImportStatus] = useState<{ text: string; success: boolean } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportTopology = () => {
+    const data = {
+      exportVersion: '2.5.0',
+      exportedAt: new Date().toISOString(),
+      cluster: {
+        hostNodes,
+        servers,
+        proxyRules
+      }
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nexus-cluster-backup-${Date.now().toString(36)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportTopology = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (parsed.cluster && onImportCluster) {
+          onImportCluster({
+            servers: parsed.cluster.servers || [],
+            hostNodes: parsed.cluster.hostNodes || [],
+            proxyRules: parsed.cluster.proxyRules || []
+          });
+          setImportStatus({
+            text: `Successfully restored ${parsed.cluster.servers?.length || 0} servers and ${parsed.cluster.hostNodes?.length || 0} nodes!`,
+            success: true
+          });
+          setTimeout(() => setImportStatus(null), 4000);
+        } else {
+          setImportStatus({ text: 'Invalid cluster snapshot format.', success: false });
+          setTimeout(() => setImportStatus(null), 4000);
+        }
+      } catch (err) {
+        setImportStatus({ text: 'Failed to parse JSON file.', success: false });
+        setTimeout(() => setImportStatus(null), 4000);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const handleCopy = (key: string, code: string) => {
     navigator.clipboard.writeText(code);
@@ -137,15 +204,44 @@ CMD ["npm", "run", "start"]`;
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            <a
-              href="#export-instructions"
-              className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.35)] transition"
+            <button
+              onClick={handleExportTopology}
+              className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-3 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.35)] transition cursor-pointer"
             >
-              <Download className="w-4 h-4" />
-              <span>Export Code ZIP</span>
-            </a>
+              <FileJson className="w-4 h-4" />
+              <span>Export Cluster Topology (JSON)</span>
+            </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center space-x-2 bg-[#161922] hover:bg-white/10 text-slate-200 font-bold text-xs px-4 py-3 rounded-xl border border-white/10 transition cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-indigo-400" />
+              <span>Import Cluster Backup</span>
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportTopology}
+              accept=".json"
+              className="hidden"
+            />
           </div>
         </div>
+
+        {importStatus && (
+          <div
+            className={`mt-4 p-3 rounded-xl text-xs flex items-center space-x-2 border ${
+              importStatus.success
+                ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{importStatus.text}</span>
+          </div>
+        )}
       </div>
 
       {/* Target OS Filter Switcher */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Puzzle, 
   Search, 
@@ -21,13 +21,15 @@ import {
 } from 'lucide-react';
 import { DeployedServer, ModPlugin } from '../types';
 
-interface ModManagerProps {
+export interface ModManagerProps {
   servers: DeployedServer[];
   selectedServerId?: string;
+  embedded?: boolean;
   onSelectServer?: (serverId: string) => void;
   onInstallMod: (serverId: string, mod: ModPlugin) => void;
   onUninstallMod: (serverId: string, modId: string) => void;
   onToggleMod: (serverId: string, modId: string) => void;
+  onUpdateModConfig?: (serverId: string, modId: string, newConfig: string) => void;
 }
 
 // Curated Online Mod Repositories Mock Database
@@ -201,10 +203,12 @@ const MOCK_ONLINE_MOD_HUB: Record<string, ModPlugin[]> = {
 export const ModManager: React.FC<ModManagerProps> = ({
   servers,
   selectedServerId: externalSelectedServerId,
+  embedded = false,
   onSelectServer,
   onInstallMod,
   onUninstallMod,
   onToggleMod,
+  onUpdateModConfig,
 }) => {
   const [internalServerId, setInternalServerId] = useState<string>(servers[0]?.id || '');
   const activeServerId = externalSelectedServerId || internalServerId;
@@ -227,6 +231,17 @@ export const ModManager: React.FC<ModManagerProps> = ({
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
 
+  // Timers cleanup ref
+  const downloadTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const downloadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
+      if (downloadTimeoutRef.current) clearTimeout(downloadTimeoutRef.current);
+    };
+  }, []);
+
   const handleServerChange = (id: string) => {
     setInternalServerId(id);
     if (onSelectServer) onSelectServer(id);
@@ -242,22 +257,27 @@ export const ModManager: React.FC<ModManagerProps> = ({
   });
 
   const handleStartSelfDownload = (mod: ModPlugin) => {
+    if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
+    if (downloadTimeoutRef.current) clearTimeout(downloadTimeoutRef.current);
+
     setDownloadingMod(mod);
     setDownloadStep(1);
     setDownloadProgress(10);
 
-    const interval = setInterval(() => {
+    downloadTimerRef.current = setInterval(() => {
       setDownloadProgress((prev) => {
         if (prev >= 90) {
-          clearInterval(interval);
-          setTimeout(() => {
+          if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
+          downloadTimeoutRef.current = setTimeout(() => {
             setDownloadStep(2);
-            onInstallMod(currentServer.id, {
-              ...mod,
-              id: `mod-${Date.now()}`,
-              source: 'MOD_HUB'
-            });
-            setTimeout(() => {
+            if (currentServer) {
+              onInstallMod(currentServer.id, {
+                ...mod,
+                id: `mod-${Date.now()}`,
+                source: 'MOD_HUB'
+              });
+            }
+            downloadTimeoutRef.current = setTimeout(() => {
               setDownloadingMod(null);
               setDownloadStep(0);
               setDownloadProgress(0);
@@ -272,6 +292,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
 
   const handleSaveModConfig = () => {
     if (editingMod && currentServer) {
+      if (onUpdateModConfig) {
+        onUpdateModConfig(currentServer.id, editingMod.id, modConfigText);
+      }
       editingMod.configContent = modConfigText;
       setEditingMod(null);
     }
@@ -301,42 +324,44 @@ export const ModManager: React.FC<ModManagerProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Banner */}
-      <div className="bg-[#0F1117]/90 backdrop-blur-md border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 blur-[90px] rounded-full pointer-events-none" />
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
-              <Puzzle className="w-3.5 h-3.5 text-blue-400" />
-              <span>Modding & Plugin Orchestration Hub</span>
+      {/* Banner (hidden when embedded inside ServerDetailView) */}
+      {!embedded && (
+        <div className="bg-[#0F1117]/90 backdrop-blur-md border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 blur-[90px] rounded-full pointer-events-none" />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+            <div className="space-y-2">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
+                <Puzzle className="w-3.5 h-3.5 text-blue-400" />
+                <span>Modding & Plugin Orchestration Hub</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Mod & Plugin Manager
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
+                Self-download mods directly from online mod repositories (Modrinth, CurseForge, Thunderstore, uMod) or manage preloaded mod folders and `.jar` / `.dll` file uploads for your servers.
+              </p>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Mod & Plugin Manager
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-              Self-download mods directly from online mod repositories (Modrinth, CurseForge, Thunderstore, uMod) or manage preloaded mod folders and `.jar` / `.dll` file uploads for your servers.
-            </p>
-          </div>
 
-          {/* Server Selector Dropdown */}
-          <div className="bg-[#161922] border border-white/10 rounded-2xl p-3.5 shadow-lg shrink-0 min-w-[260px]">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Select Game Server
-            </label>
-            <select
-              value={activeServerId}
-              onChange={(e) => handleServerChange(e.target.value)}
-              className="w-full bg-[#0F1117] text-white text-xs font-bold py-2 px-3 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500 transition cursor-pointer"
-            >
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.gameName})
-                </option>
-              ))}
-            </select>
+            {/* Server Selector Dropdown */}
+            <div className="bg-[#161922] border border-white/10 rounded-2xl p-3.5 shadow-lg shrink-0 min-w-[260px]">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Select Game Server
+              </label>
+              <select
+                value={activeServerId}
+                onChange={(e) => handleServerChange(e.target.value)}
+                className="w-full bg-[#0F1117] text-white text-xs font-bold py-2 px-3 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500 transition cursor-pointer"
+              >
+                {servers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.gameName})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">

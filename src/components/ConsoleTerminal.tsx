@@ -1,38 +1,158 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Send, Trash2, ArrowDown, Play, Filter, Copy, Check } from 'lucide-react';
+import { Terminal, Send, Trash2, ArrowDown, Play, Filter, Copy, Check, Radio, Wifi, WifiOff } from 'lucide-react';
 import { LogEntry } from '../types';
 
 interface ConsoleTerminalProps {
   logs: LogEntry[];
   onSendCommand: (cmd: string) => void;
   serverName: string;
+  containerId?: string;
+  rconPort?: number;
+  rconPassword?: string;
+  hostIp?: string;
 }
 
-export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCommand, serverName }) => {
+export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({
+  logs,
+  onSendCommand,
+  serverName,
+  containerId,
+  rconPort,
+  rconPassword,
+  hostIp
+}) => {
   const [commandInput, setCommandInput] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('ALL');
   const [autoScroll, setAutoScroll] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [liveStreamLogs, setLiveStreamLogs] = useState<LogEntry[]>([]);
+
   const logEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Initialize WebSocket connection to backend
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/console?serverId=${encodeURIComponent(serverName)}&containerId=${containerId || ''}`;
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        setWsConnected(true);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.message) {
+            setLiveStreamLogs((prev) => [
+              ...prev.slice(-200),
+              {
+                id: parsed.id || Date.now().toString(),
+                timestamp: parsed.timestamp || new Date().toLocaleTimeString(),
+                level: parsed.level || 'INFO',
+                message: parsed.message
+              }
+            ]);
+          }
+        } catch (err) {}
+      };
+
+      socket.onclose = () => {
+        setWsConnected(false);
+      };
+
+      socket.onerror = () => {
+        setWsConnected(false);
+      };
+    } catch (e) {
+      setWsConnected(false);
+    }
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [serverName, containerId]);
+
+  // Combined logs: server prop logs + live socket logs
+  const combinedLogs = [...logs, ...liveStreamLogs];
 
   useEffect(() => {
     if (autoScroll) {
       logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs, autoScroll]);
+  }, [combinedLogs, autoScroll]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commandInput.trim()) return;
-    onSendCommand(commandInput.trim());
+    const trimmed = commandInput.trim();
+    if (!trimmed) return;
+
+    setHistory((prev) => [...prev, trimmed]);
+    setHistoryIndex(-1);
+
+    // If WebSocket is open, send payload with RCON parameters
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        command: trimmed,
+        containerId,
+        rconPort,
+        rconPassword,
+        host: hostIp
+      }));
+    }
+
+    onSendCommand(trimmed);
     setCommandInput('');
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (history.length > 0) {
+        const nextIdx = historyIndex + 1 < history.length ? historyIndex + 1 : historyIndex;
+        setHistoryIndex(nextIdx);
+        setCommandInput(history[history.length - 1 - nextIdx] || '');
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const nextIdx = historyIndex - 1;
+        setHistoryIndex(nextIdx);
+        setCommandInput(history[history.length - 1 - nextIdx] || '');
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setCommandInput('');
+      }
+    }
+  };
+
   const handleQuickMacro = (macro: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        command: macro,
+        containerId,
+        rconPort,
+        rconPassword,
+        host: hostIp
+      }));
+    }
     onSendCommand(macro);
   };
 
-  const filteredLogs = logs.filter((log) => {
+  const handleClearTerminal = () => {
+    setLiveStreamLogs([]);
+  };
+
+  const filteredLogs = combinedLogs.filter((log) => {
     if (filterLevel === 'ALL') return true;
     return log.level === filterLevel;
   });
@@ -53,22 +173,36 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCo
   };
 
   const copyLogs = () => {
-    const text = logs.map((l) => `[${l.timestamp}] [${l.level}] ${l.message}`).join('\n');
+    const text = filteredLogs.map((l) => `[${l.timestamp}] [${l.level}] ${l.message}`).join('\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[520px] shadow-xl">
+    <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[540px] shadow-xl">
       {/* Console Bar */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 gap-2">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2.5">
           <Terminal className="w-4 h-4 text-indigo-400" />
           <span className="font-mono text-xs font-semibold text-slate-200">
             Console Terminal — {serverName}
           </span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          
+          {/* Live WebSocket Indicator */}
+          <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono border transition">
+            {wsConnected ? (
+              <span className="flex items-center space-x-1 text-emerald-400 bg-emerald-500/10 border-emerald-500/30 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>Live Socket</span>
+              </span>
+            ) : (
+              <span className="flex items-center space-x-1 text-blue-400 bg-blue-500/10 border-blue-500/20 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span>Direct Buffer</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Console Controls */}
@@ -79,7 +213,7 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCo
             <select
               value={filterLevel}
               onChange={(e) => setFilterLevel(e.target.value)}
-              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
+              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer text-xs"
             >
               <option value="ALL" className="bg-slate-900">All Logs</option>
               <option value="INFO" className="bg-slate-900">INFO</option>
@@ -98,6 +232,14 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCo
             }`}
           >
             Auto-Scroll
+          </button>
+
+          <button
+            onClick={handleClearTerminal}
+            className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+            title="Clear Stream Logs"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
 
           <button
@@ -129,10 +271,13 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCo
         <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider shrink-0">Macros:</span>
         {[
           { label: 'save-all', cmd: 'save-all' },
-          { label: 'op player', cmd: 'op AlexTheBuilder' },
-          { label: 'say Welcome', cmd: 'say Welcome to our GameHost server!' },
+          { label: 'tps', cmd: 'tps' },
           { label: 'status', cmd: 'status' },
           { label: 'list players', cmd: 'list' },
+          { label: 'time day', cmd: 'time set day' },
+          { label: 'seed', cmd: 'seed' },
+          { label: 'op player', cmd: 'op AlexTheBuilder' },
+          { label: 'say Welcome', cmd: 'say Welcome to our GameHost server!' },
           { label: 'kick all', cmd: 'kick @a Maintenance restart' }
         ].map((m, idx) => (
           <button
@@ -152,7 +297,8 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({ logs, onSendCo
           type="text"
           value={commandInput}
           onChange={(e) => setCommandInput(e.target.value)}
-          placeholder="Type server command (e.g. op, kick, say, save-all, status)..."
+          onKeyDown={handleKeyDown}
+          placeholder="Type server command (e.g. tps, status, list, op, kick, say, seed)... Use ↑/↓ for history"
           className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
         />
         <button

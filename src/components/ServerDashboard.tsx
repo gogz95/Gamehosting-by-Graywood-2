@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Server, Play, Square, RefreshCw, Globe, Users, Cpu, HardDrive, Terminal, Copy, Check, Plus, Network, ExternalLink, Rocket } from 'lucide-react';
-import { DeployedServer } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Server, Play, Square, RefreshCw, Globe, Users, Cpu, HardDrive, Terminal, Copy, Check, Plus, Network, ExternalLink, Rocket, Radio, Activity } from 'lucide-react';
+import { DeployedServer, DockerSystemStatus } from '../types';
 
 interface ServerDashboardProps {
   servers: DeployedServer[];
@@ -18,6 +18,16 @@ export const ServerDashboard: React.FC<ServerDashboardProps> = ({
   onOpenProxyManager,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [dockerStatus, setDockerStatus] = useState<DockerSystemStatus | null>(null);
+  const [queryingId, setQueryingId] = useState<string | null>(null);
+  const [queryResults, setQueryResults] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    fetch('/api/docker/status')
+      .then((res) => res.json())
+      .then((data) => setDockerStatus(data))
+      .catch(() => setDockerStatus({ online: false, mode: 'STANDALONE' }));
+  }, []);
 
   const handleCopyDomain = (e: React.MouseEvent, text: string, id: string) => {
     e.stopPropagation();
@@ -26,17 +36,51 @@ export const ServerDashboard: React.FC<ServerDashboardProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleLiveQuery = async (e: React.MouseEvent, srv: DeployedServer) => {
+    e.stopPropagation();
+    setQueryingId(srv.id);
+    try {
+      const res = await fetch('/api/game/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: srv.gameId.includes('minecraft') ? 'minecraft' : 'valheim',
+          host: srv.nodeIp,
+          port: srv.port
+        })
+      });
+      const data = await res.json();
+      setQueryResults((prev) => ({ ...prev, [srv.id]: data }));
+    } catch (err) {}
+    setQueryingId(null);
+  };
+
   return (
     <div className="space-y-8">
       {/* Top Welcome Banner */}
       <div className="bg-[#0F1117]/90 backdrop-blur-md border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 blur-[90px] rounded-full pointer-events-none" />
         <div className="relative z-10 space-y-2">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
-            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest">
-              Proxy Gateway Active
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                Proxy Gateway Active
+              </span>
+            </div>
+
+            {dockerStatus && (
+              <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
+                dockerStatus.online
+                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                  : 'bg-slate-800/80 border-white/10 text-slate-400'
+              }`}>
+                <Activity className="w-3 h-3" />
+                <span>
+                  {dockerStatus.online ? `Docker Engine: Live (${dockerStatus.version})` : 'Docker: Standalone Mode'}
+                </span>
+              </div>
+            )}
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Active Server Instances
@@ -170,14 +214,33 @@ export const ServerDashboard: React.FC<ServerDashboardProps> = ({
                 </div>
               </div>
 
+              {queryResults[server.id] && (
+                <div className="bg-[#161922] border border-blue-500/30 rounded-xl px-3 py-1.5 text-[11px] font-mono flex items-center justify-between text-blue-300">
+                  <span>Latency: {queryResults[server.id].ping}ms</span>
+                  <span className={queryResults[server.id].online ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
+                    {queryResults[server.id].online ? '● Live UDP Query' : '○ Standalone'}
+                  </span>
+                </div>
+              )}
+
               {/* Footer Controls & Stats */}
               <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                  <Users className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="font-semibold text-slate-200">
-                    {server.currentPlayers}/{server.maxPlayers}
-                  </span>
-                  <span>Online</span>
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+                    <Users className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="font-semibold text-slate-200">
+                      {queryResults[server.id]?.online ? queryResults[server.id].players : server.currentPlayers}/{server.maxPlayers}
+                    </span>
+                    <span>Online</span>
+                  </div>
+
+                  <button
+                    onClick={(e) => handleLiveQuery(e, server)}
+                    className="p-1 hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 rounded-lg transition cursor-pointer"
+                    title="Live UDP Protocol Ping (GameDig)"
+                  >
+                    <Radio className={`w-3.5 h-3.5 ${queryingId === server.id ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
 
                 <div className="flex items-center space-x-2">

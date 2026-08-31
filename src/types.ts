@@ -150,6 +150,8 @@ export interface DeployedServer {
   autoRestart: boolean;
   cpuUsagePct: number;
   ramUsagePct: number;
+  dockerContainerId?: string;
+  isLiveContainer?: boolean;
 }
 
 export interface HostNode {
@@ -175,6 +177,37 @@ export interface HostNode {
   region?: string;
   tags?: string[];
   publicDomains?: string[];
+  agentConnected?: boolean;
+  agentVersion?: string;
+  lastHeartbeat?: string;
+  osType?: 'LINUX' | 'WINDOWS' | 'MACOS' | 'DOCKER';
+  enrollmentToken?: string;
+}
+
+export interface AgentRegisterPayload {
+  token: string;
+  name: string;
+  location: string;
+  ipAddress?: string;
+  countryCode?: string;
+  provider?: string;
+  osType: 'LINUX' | 'WINDOWS' | 'MACOS' | 'DOCKER';
+  cpuModel: string;
+  cpuCores: number;
+  totalRamGb: number;
+  totalDiskGb: number;
+  dockerVersion: string;
+  agentVersion: string;
+}
+
+export interface AgentTelemetryPayload {
+  nodeId: string;
+  cpuUsagePct: number;
+  ramUsagePct: number;
+  usedRamGb: number;
+  totalRamGb: number;
+  activeContainers: number;
+  timestamp: string;
 }
 
 export interface ProxyRule {
@@ -192,4 +225,46 @@ export interface ProxyRule {
   status: ProxyStatus;
   lastVerified: string;
   bandwidthUsageMb: number;
+}
+
+export interface DockerSystemStatus {
+  online: boolean;
+  version?: string;
+  containersCount?: number;
+  imagesCount?: number;
+  os?: string;
+  endpoint?: string;
+  mode: 'LIVE' | 'STANDALONE';
+  message?: string;
+}
+
+export interface GameQueryResult {
+  online: boolean;
+  name?: string;
+  map?: string;
+  players: number;
+  maxPlayers: number;
+  playerList?: { name: string; ping?: number }[];
+  ping: number;
+  connect?: string;
+  version?: string;
+  raw?: any;
+  error?: string;
+}
+
+export interface LiveProxyApplyResult {
+  engine: ProxyEngine;
+  status: 'APPLIED' | 'FAILED' | 'SIMULATED';
+  message: string;
+  timestamp: string;
+  endpointCalled?: string;
+}
+
+export interface CloudflareDnsRecord {
+  id?: string;
+  type: 'A' | 'CNAME' | 'SRV' | 'TXT';
+  name: string;
+  content: string;
+  proxied: boolean;
+  ttl: number;
 }

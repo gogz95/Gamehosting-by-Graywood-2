@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Rocket, Server, Network, ShieldCheck, CheckCircle2, Cpu, HardDrive, Lock, Terminal, ArrowRight, ArrowLeft, RefreshCw, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Rocket, Server, Network, ShieldCheck, CheckCircle2, Cpu, HardDrive, Lock, Terminal, ArrowRight, ArrowLeft, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 import { GameTemplate, HostNode, ProxyEngine, DeployedServer } from '../types';
 
@@ -8,6 +8,7 @@ interface DeployModalProps {
   onClose: () => void;
   preselectedGameTemplate?: GameTemplate | null;
   hostNodes: HostNode[];
+  existingServers?: DeployedServer[];
   onServerDeployed: (newServer: DeployedServer) => void;
 }
 
@@ -16,6 +17,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
   onClose,
   preselectedGameTemplate,
   hostNodes,
+  existingServers = [],
   onServerDeployed,
 }) => {
   const [step, setStep] = useState<number>(1);
@@ -49,6 +51,30 @@ export const DeployModal: React.FC<DeployModalProps> = ({
   const [createdServer, setCreatedServer] = useState<DeployedServer | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Timers cleanup ref
+  const deployTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  useEffect(() => {
+    return () => {
+      deployTimersRef.current.forEach(clearTimeout);
+      deployTimersRef.current = [];
+    };
+  }, []);
+
+  // Subdomain & Port Conflict Detection
+  const isSubdomainConflict = Boolean(
+    subdomain &&
+    existingServers.some(
+      (s) =>
+        s.subdomain.toLowerCase() === subdomain.toLowerCase() &&
+        s.baseDomain.toLowerCase() === baseDomain.toLowerCase()
+    )
+  );
+
+  const isPortConflict = existingServers.some(
+    (s) => s.nodeId === selectedNodeId && s.port === selectedGame.defaultPort
+  );
+
   useEffect(() => {
     if (preselectedGameTemplate) {
       setSelectedGame(preselectedGameTemplate);
@@ -71,11 +97,30 @@ export const DeployModal: React.FC<DeployModalProps> = ({
     setProxyEngine(game.proxyTypeDefault);
   };
 
+  const handleAutoFixSubdomain = () => {
+    let candidate = `${subdomain}2`;
+    let count = 2;
+    while (
+      existingServers.some(
+        (s) =>
+          s.subdomain.toLowerCase() === candidate.toLowerCase() &&
+          s.baseDomain.toLowerCase() === baseDomain.toLowerCase()
+      )
+    ) {
+      count++;
+      candidate = `${subdomain}${count}`;
+    }
+    setSubdomain(candidate);
+  };
+
   const handleStartDeployment = () => {
     setStep(4);
     setIsDeploying(true);
     setDeploymentLogs([]);
     setDeployProgressPct(0);
+
+    deployTimersRef.current.forEach(clearTimeout);
+    deployTimersRef.current = [];
 
     const selectedNode = hostNodes.find((n) => n.id === selectedNodeId) || hostNodes[0];
     const fullDomain = `${subdomain}.${baseDomain}`;
@@ -127,6 +172,34 @@ export const DeployModal: React.FC<DeployModalProps> = ({
 
     setCreatedServer(newServer);
 
+    // Dispatch real container deployment to backend
+    fetch('/api/docker/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serverName: serverName || `${selectedGame.name} Server`,
+        gameId: selectedGame.id,
+        dockerImage: selectedGame.dockerImage,
+        port: selectedGame.defaultPort,
+        ramGb: ramAllocatedGb,
+        cpuCores: cpuAllocatedCores,
+        envVars: {
+          ...selectedGame.defaultEnvVars,
+          MAX_PLAYERS: String(maxPlayers),
+          WORLD_NAME: worldName,
+          ADMIN_PASS: adminPassword
+        }
+      })
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.containerId) {
+          newServer.dockerContainerId = data.containerId;
+          newServer.isLiveContainer = Boolean(data.isLive);
+        }
+      })
+      .catch(() => {});
+
     // Simulated log build stream
     const steps = [
       { text: `[1/6] Allocating container hardware resources on ${selectedNode.name}...`, delay: 600, pct: 15 },
@@ -138,7 +211,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
     ];
 
     steps.forEach((s) => {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setDeploymentLogs((prev) => [...prev, s.text]);
         setDeployProgressPct(s.pct);
         if (s.pct === 100) {
@@ -147,6 +220,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
           onServerDeployed(newServer);
         }
       }, s.delay);
+      deployTimersRef.current.push(timer);
     });
   };
 
@@ -361,6 +435,29 @@ export const DeployModal: React.FC<DeployModalProps> = ({
                 <p className="text-[11px] text-indigo-300 font-mono pt-1">
                   Full connection domain: <span className="font-bold underline">{subdomain || 'prefix'}.{baseDomain}</span>
                 </p>
+
+                {isSubdomainConflict && (
+                  <div className="flex items-center justify-between p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl text-xs text-amber-300">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Route <strong>{subdomain}.{baseDomain}</strong> is already allocated.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoFixSubdomain}
+                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                    >
+                      Auto-Resolve
+                    </button>
+                  </div>
+                )}
+
+                {isPortConflict && (
+                  <div className="flex items-center space-x-2 p-3 bg-blue-950/40 border border-blue-500/30 rounded-xl text-xs text-blue-300">
+                    <AlertTriangle className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>Port {selectedGame.defaultPort} is currently mapped on this node. A dynamic bridge port will be assigned.</span>
+                  </div>
+                )}
               </div>
 
               {/* Proxy Engine Selector */}

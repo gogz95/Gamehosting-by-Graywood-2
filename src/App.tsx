@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ServerDashboard } from './components/ServerDashboard';
 import { GameCatalog } from './components/GameCatalog';
@@ -25,6 +25,29 @@ export default function App() {
 
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [preselectedGame, setPreselectedGame] = useState<GameTemplate | null>(null);
+
+  // Sync live connected agent nodes from master gateway
+  useEffect(() => {
+    const fetchLiveNodes = () => {
+      fetch('/api/nodes')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
+            setHostNodes((prev) => {
+              const nodeMap = new Map<string, HostNode>();
+              prev.forEach((n) => nodeMap.set(n.id, n));
+              data.nodes.forEach((n: HostNode) => nodeMap.set(n.id, n));
+              return Array.from(nodeMap.values());
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchLiveNodes();
+    const interval = setInterval(fetchLiveNodes, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Deploy Modal Handler
   const handleOpenDeployModal = (game?: GameTemplate) => {
@@ -173,6 +196,28 @@ export default function App() {
     );
   };
 
+  const handleUpdateModConfig = (serverId: string, modId: string, newConfig: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const targetMod = s.mods.find((m) => m.id === modId);
+        return {
+          ...s,
+          mods: s.mods.map((m) => (m.id === modId ? { ...m, configContent: newConfig } : m)),
+          logs: [
+            ...s.logs,
+            {
+              id: Date.now().toString(),
+              timestamp: new Date().toLocaleTimeString(),
+              level: 'SYSTEM',
+              message: `[ModManager]: Configuration saved for mod ${targetMod?.name || modId}.`
+            }
+          ]
+        };
+      })
+    );
+  };
+
   // Backup Handlers
   const handleTakeSnapshot = (serverId: string, snapshotName: string) => {
     const newSnapshot: BackupSnapshot = {
@@ -238,6 +283,12 @@ export default function App() {
         };
       })
     );
+  };
+
+  const handleImportCluster = (data: { servers: DeployedServer[]; hostNodes: HostNode[]; proxyRules: ProxyRule[] }) => {
+    if (data.servers && data.servers.length > 0) setServers(data.servers);
+    if (data.hostNodes && data.hostNodes.length > 0) setHostNodes(data.hostNodes);
+    if (data.proxyRules && data.proxyRules.length > 0) setProxyRules(data.proxyRules);
   };
 
   const filteredServers = servers.filter((s) => {
@@ -307,6 +358,7 @@ export default function App() {
                 onInstallMod={handleInstallMod}
                 onUninstallMod={handleUninstallMod}
                 onToggleMod={handleToggleMod}
+                onUpdateModConfig={handleUpdateModConfig}
               />
             )}
 
@@ -321,7 +373,14 @@ export default function App() {
 
             {activeTab === 'ai' && <AiTroubleshooter servers={servers} />}
 
-            {activeTab === 'export' && <ExecutablePackager />}
+            {activeTab === 'export' && (
+              <ExecutablePackager
+                servers={servers}
+                hostNodes={hostNodes}
+                proxyRules={proxyRules}
+                onImportCluster={handleImportCluster}
+              />
+            )}
           </>
         )}
       </main>
@@ -332,6 +391,7 @@ export default function App() {
         onClose={() => setDeployModalOpen(false)}
         preselectedGameTemplate={preselectedGame}
         hostNodes={hostNodes}
+        existingServers={servers}
         onServerDeployed={handleServerDeployed}
       />
 

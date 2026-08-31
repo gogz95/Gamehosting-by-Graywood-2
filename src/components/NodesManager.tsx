@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   HardDrive, 
   Cpu, 
@@ -13,7 +13,13 @@ import {
   Layers, 
   Zap, 
   Info, 
-  Network 
+  Network,
+  Radio,
+  Copy,
+  Check,
+  ExternalLink,
+  Activity,
+  Boxes
 } from 'lucide-react';
 import { HostNode } from '../types';
 
@@ -25,8 +31,9 @@ interface NodesManagerProps {
 
 export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode, onDeleteNode }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
-  // Modal Form State
+  // Manual Node Modal Form State
   const [nodeName, setNodeName] = useState('');
   const [ipAddress, setIpAddress] = useState('');
   const [provider, setProvider] = useState('Hetzner Cloud Dedicated AX102');
@@ -39,6 +46,60 @@ export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode
   const [sshPort, setSshPort] = useState(22);
   const [tagsInput, setTagsInput] = useState('High RAM, NVMe Gen4, DDoS Protected');
   const [domainInput, setDomainInput] = useState('srv.playcraft.gg');
+
+  // Connect Remote Agent Wizard State
+  const [selectedAgentOS, setSelectedAgentOS] = useState<'LINUX' | 'WINDOWS' | 'DOCKER' | 'MANUAL'>('LINUX');
+  const [enrollData, setEnrollData] = useState<{
+    token: string;
+    masterUrl: string;
+    curlCommand: string;
+    powershellCommand: string;
+    dockerCommand: string;
+    manualCommand: string;
+  } | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [enrolledNodeFound, setEnrolledNodeFound] = useState<HostNode | null>(null);
+
+  // Fetch enrollment data when modal opens
+  useEffect(() => {
+    if (isConnectModalOpen) {
+      setEnrolledNodeFound(null);
+      fetch('/api/nodes/enroll')
+        .then((res) => res.json())
+        .then((data) => setEnrollData(data))
+        .catch(() => {});
+    }
+  }, [isConnectModalOpen]);
+
+  // Poll for newly connected agent while enrollment modal is open
+  useEffect(() => {
+    if (!isConnectModalOpen || !enrollData) return;
+
+    const interval = setInterval(() => {
+      fetch('/api/nodes')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.nodes && data.nodes.length > 0) {
+            const newlyConnected = data.nodes.find(
+              (n: HostNode) => n.agentConnected && !hostNodes.some((h) => h.id === n.id)
+            );
+            if (newlyConnected) {
+              setEnrolledNodeFound(newlyConnected);
+              onAddNode(newlyConnected);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isConnectModalOpen, enrollData, hostNodes, onAddNode]);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const handleCreateNode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +130,6 @@ export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode
 
     onAddNode(newNode);
     setIsAddModalOpen(false);
-    // Reset defaults
     setNodeName('');
     setIpAddress('');
   };
@@ -81,21 +141,31 @@ export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode
         <div className="space-y-2">
           <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
             <HardDrive className="w-3.5 h-3.5 text-blue-400" />
-            <span>Infrastructure & VPS Docker Host Cluster</span>
+            <span>Infrastructure & Distributed Worker Cluster</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Host Node Servers</h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
-            Manage multi-tier VPS nodes with custom CPU, RAM, and NVMe specs. Docker daemons run on each node to host game server containers and route custom subdomains.
+            Distribute different games across different physical nodes (Frankfurt, Virginia, home lab). Attach any remote VPS with a single command via our lightweight outbound agent.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.35)] transition cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Connect VPS Node</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <button
+            onClick={() => setIsConnectModalOpen(true)}
+            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.35)] transition cursor-pointer"
+          >
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span>+ Connect Remote Node</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center space-x-2 bg-[#161922] hover:bg-white/10 text-slate-200 border border-white/10 font-semibold text-xs px-4 py-3 rounded-xl transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Manual Node</span>
+          </button>
+        </div>
       </div>
 
       {/* Nodes Cards Grid */}
@@ -110,17 +180,28 @@ export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+                    <span className={`w-2.5 h-2.5 rounded-full ${node.agentConnected ? 'bg-emerald-400 animate-ping' : 'bg-emerald-400'}`} />
                     <h3 className="font-extrabold text-white text-lg">{node.name}</h3>
                   </div>
                   <div className="text-xs text-slate-400 font-mono">
-                    {node.ipAddress}:{node.sshPort || 22} • {node.location}
+                    {node.ipAddress} • {node.location}
                   </div>
                 </div>
 
-                <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 font-bold text-[10px] uppercase tracking-wider shrink-0">
-                  {node.status}
-                </span>
+                <div className="flex flex-col items-end space-y-1">
+                  <span className={`px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider ${
+                    node.agentConnected
+                      ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                      : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                  }`}>
+                    {node.agentConnected ? '● Live Agent' : node.status}
+                  </span>
+                  {node.osType && (
+                    <span className="text-[10px] font-mono text-slate-500 uppercase">
+                      {node.osType}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Hardware Specs Highlights */}
@@ -198,221 +279,235 @@ export const NodesManager: React.FC<NodesManagerProps> = ({ hostNodes, onAddNode
                   <div className="w-full bg-[#161922] h-2 rounded-full overflow-hidden border border-white/5">
                     <div
                       className="bg-slate-400 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${(node.usedDiskGb / node.totalDiskGb) * 100}%` }}
+                      style={{ width: `${Math.round((node.usedDiskGb / (node.totalDiskGb || 1)) * 100)}%` }}
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Docker Details Footer */}
-            <div className="pt-3 border-t border-white/5 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-mono text-[11px]">{node.dockerVersion}</span>
-                <span className="font-bold text-blue-400">{node.activeContainers} Game Containers</span>
+            {/* Bottom Actions */}
+            <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center space-x-1.5 font-mono text-[11px]">
+                <Boxes className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{node.activeContainers || 0} Game Containers</span>
               </div>
 
-              {onDeleteNode && hostNodes.length > 1 && (
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={() => onDeleteNode(node.id)}
-                    className="text-rose-400 hover:text-rose-300 text-[11px] font-semibold flex items-center space-x-1 hover:bg-rose-500/10 px-2 py-1 rounded-lg transition"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Disconnect Node</span>
-                  </button>
-                </div>
+              {onDeleteNode && (
+                <button
+                  onClick={() => onDeleteNode(node.id)}
+                  className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
+                  title="Remove Node from Cluster"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* CONNECT VPS NODE MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0A0B10]/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#0F1117] border border-white/10 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col my-8">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 bg-[#0F1117]">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.3)]">
-                  <Server className="w-5 h-5" />
+      {/* --------------------------------------------------------------------------- */}
+      {/* Interactive 1-Click Connect Node Enrollment Wizard Modal */}
+      {/* --------------------------------------------------------------------------- */}
+      {isConnectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0F1117] border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-6 p-6 sm:p-8 relative">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Outbound WebSocket Enrollment</span>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-white text-lg">
-                    Connect New VPS Host Node
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Specify custom CPU, RAM, NVMe, and SSH credentials to join this server node to the Docker proxy cluster.
-                  </p>
-                </div>
+                <h3 className="text-xl sm:text-2xl font-extrabold text-white">Connect Remote Worker Node</h3>
+                <p className="text-xs text-slate-400 max-w-md">
+                  No open inbound ports needed. Run this 1-line installer on any remote Linux VPS or Windows PC to register it instantly.
+                </p>
               </div>
 
               <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition"
+                onClick={() => setIsConnectModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateNode} className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Node Friendly Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Node-04 (Tokyo High-RAM)"
-                    value={nodeName}
-                    onChange={(e) => setNodeName(e.target.value)}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+            {/* Target OS Switcher */}
+            <div className="flex space-x-2 border-b border-white/10 pb-3">
+              {[
+                { id: 'LINUX' as const, label: 'Linux (Ubuntu/Debian/Rocky)' },
+                { id: 'WINDOWS' as const, label: 'Windows Server / PC' },
+                { id: 'DOCKER' as const, label: 'Docker Container' },
+                { id: 'MANUAL' as const, label: 'Manual Node CLI' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedAgentOS(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    selectedAgentOS === tab.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Hosting Provider / Server Tier</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Hetzner Dedicated / AWS / Bare Metal"
-                    value={provider}
-                    onChange={(e) => setProvider(e.target.value)}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+            {/* Command Copy Box */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                <span>Run this command on your remote server:</span>
+                <span className="text-slate-500 font-mono text-[11px]">Token: {enrollData?.token || 'loading...'}</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">IPv4 Address</label>
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex items-center justify-between font-mono text-xs text-indigo-300 gap-4">
+                <code className="break-all select-all">
+                  {selectedAgentOS === 'LINUX' && (enrollData?.curlCommand || 'Loading command...')}
+                  {selectedAgentOS === 'WINDOWS' && (enrollData?.powershellCommand || 'Loading command...')}
+                  {selectedAgentOS === 'DOCKER' && (enrollData?.dockerCommand || 'Loading command...')}
+                  {selectedAgentOS === 'MANUAL' && (enrollData?.manualCommand || 'Loading command...')}
+                </code>
+
+                <button
+                  onClick={() => {
+                    const cmd =
+                      selectedAgentOS === 'LINUX'
+                        ? enrollData?.curlCommand
+                        : selectedAgentOS === 'WINDOWS'
+                        ? enrollData?.powershellCommand
+                        : selectedAgentOS === 'DOCKER'
+                        ? enrollData?.dockerCommand
+                        : enrollData?.manualCommand;
+                    if (cmd) handleCopy(cmd, 'agent-cmd');
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs flex items-center space-x-1.5 shrink-0 transition cursor-pointer shadow-md"
+                >
+                  {copiedKey === 'agent-cmd' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey === 'agent-cmd' ? 'Copied!' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Connection Status Box */}
+            {enrolledNodeFound ? (
+              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-4 flex items-center justify-between text-xs text-emerald-300">
+                <div className="flex items-center space-x-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div>
+                    <strong className="text-white block font-semibold">Node Successfully Enrolled!</strong>
+                    <span>{enrolledNodeFound.name} ({enrolledNodeFound.cpuCores} Cores, {enrolledNodeFound.totalRamGb}GB RAM) is now active in your cluster.</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsConnectModalOpen(false)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="bg-[#161922] border border-white/5 rounded-2xl p-4 flex items-center space-x-3 text-xs text-slate-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                <span>Listening for agent outbound connection on <code className="text-indigo-300 font-mono">/ws/nodes</code>... Run the command above on your server.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------------- */}
+      {/* Manual VPS Node Registration Modal */}
+      {/* --------------------------------------------------------------------------- */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0F1117] border border-white/10 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-extrabold text-white">Add Pre-Configured VPS Node</h3>
+                <p className="text-xs text-slate-400">Register an existing cloud server into your management inventory.</p>
+              </div>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNode} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Node Nickname</label>
+                <input
+                  type="text"
+                  required
+                  value={nodeName}
+                  onChange={(e) => setNodeName(e.target.value)}
+                  placeholder="e.g. Frankfurt Dedicated 1 (Ryzen 9)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">IP Address</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. 140.82.112.4"
                     value={ipAddress}
                     onChange={(e) => setIpAddress(e.target.value)}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-blue-500"
+                    placeholder="162.55.180.42"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">SSH Port</label>
-                  <input
-                    type="number"
-                    required
-                    value={sshPort}
-                    onChange={(e) => setSshPort(Number(e.target.value))}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Location</label>
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Location</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Tokyo, Japan"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    placeholder="Frankfurt, Germany"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
-              {/* Specs Fields */}
-              <div className="border-t border-white/5 pt-4 space-y-4">
-                <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider">Custom Hardware Specifications</h4>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">CPU Model & Architecture</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">RAM (GB)</label>
                   <input
-                    type="text"
-                    required
-                    placeholder="e.g. AMD Ryzen 9 7950X (16 Cores / 32 Threads @ 4.5GHz)"
-                    value={cpuModel}
-                    onChange={(e) => setCpuModel(e.target.value)}
-                    className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                    type="number"
+                    value={totalRamGb}
+                    onChange={(e) => setTotalRamGb(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Total RAM (GB)</label>
-                    <input
-                      type="number"
-                      required
-                      min={4}
-                      value={totalRamGb}
-                      onChange={(e) => setTotalRamGb(Number(e.target.value))}
-                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">CPU Cores</label>
-                    <input
-                      type="number"
-                      required
-                      min={2}
-                      value={cpuCores}
-                      onChange={(e) => setCpuCores(Number(e.target.value))}
-                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">NVMe Storage (GB)</label>
-                    <input
-                      type="number"
-                      required
-                      min={50}
-                      value={totalDiskGb}
-                      onChange={(e) => setTotalDiskGb(Number(e.target.value))}
-                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Node Tags (comma separated)</label>
-                    <input
-                      type="text"
-                      placeholder="High RAM, NVMe Gen4, Low Latency"
-                      value={tagsInput}
-                      onChange={(e) => setTagsInput(e.target.value)}
-                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Mapped Domain Endpoints</label>
-                    <input
-                      type="text"
-                      placeholder="srv.playcraft.gg, nexus-node.io"
-                      value={domainInput}
-                      onChange={(e) => setDomainInput(e.target.value)}
-                      className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">CPU Cores</label>
+                  <input
+                    type="number"
+                    value={cpuCores}
+                    onChange={(e) => setCpuCores(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                  />
                 </div>
               </div>
 
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-white/5">
+              <div className="pt-3 flex justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-5 py-2.5 bg-[#161922] hover:bg-white/10 text-slate-300 font-bold text-xs rounded-xl transition"
+                  className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.35)] transition"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition cursor-pointer shadow-md"
                 >
-                  Connect & Provision Docker Node
+                  Save Node
                 </button>
               </div>
             </form>

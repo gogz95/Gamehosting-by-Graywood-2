@@ -151,9 +151,20 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         setTimeout(() => {
           setCaptureProgress(95);
           setCaptureStage('Streaming encrypted blob to S3 Bucket...');
+
+          const targetServer = servers.find((s) => s.id === snapshotServerId);
+          fetch('/api/backups/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              serverId: snapshotServerId,
+              serverName: targetServer?.name,
+              bucketName: 'game-saves-vault-frankfurt'
+            })
+          }).catch(() => {});
+
           setTimeout(() => {
             setCaptureProgress(100);
-            const targetServer = servers.find((s) => s.id === snapshotServerId);
             const name = snapshotCustomName || `${targetServer?.gameId || 'game'}-manual-save-${Date.now().toString(36)}.tar.gz`;
             onTakeSnapshot(snapshotServerId, name);
             setIsCapturing(false);

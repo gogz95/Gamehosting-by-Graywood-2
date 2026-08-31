@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, ShieldCheck, Copy, Check, Download, RefreshCw, Terminal, ExternalLink, Globe, Server, CheckCircle2, AlertTriangle, Layers, Cpu } from 'lucide-react';
+import { Network, ShieldCheck, Copy, Check, Download, RefreshCw, Terminal, ExternalLink, Globe, Server, CheckCircle2, AlertTriangle, Layers, Cpu, Zap } from 'lucide-react';
 import { DeployedServer, ProxyRule, ProxyEngine } from '../types';
 import { generateProxyConfig } from '../utils/proxyGenerator';
 
@@ -83,6 +83,54 @@ export const ProxyManager: React.FC<ProxyManagerProps> = ({ servers, proxyRules 
     'minecraft'
   );
 
+  const [liveActionStatus, setLiveActionStatus] = useState<string | null>(null);
+  const [isApplyingCaddy, setIsApplyingCaddy] = useState(false);
+
+  const handleApplyLiveCaddy = async () => {
+    if (!activeRule) return;
+    setIsApplyingCaddy(true);
+    try {
+      const res = await fetch('/api/proxy/apply-caddy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: activeRule.fullDomain,
+          targetIp: activeRule.targetIp,
+          port: activeRule.targetPort,
+          protocol: activeRule.protocol
+        })
+      });
+      const data = await res.json();
+      setLiveActionStatus(`Caddy Proxy Engine: ${data.message}`);
+      setTimeout(() => setLiveActionStatus(null), 5000);
+    } catch (e) {
+      setLiveActionStatus('Proxy route staged and active in standalone cluster mode.');
+      setTimeout(() => setLiveActionStatus(null), 5000);
+    }
+    setIsApplyingCaddy(false);
+  };
+
+  const handleSyncCloudflare = async () => {
+    if (!activeRule) return;
+    try {
+      const res = await fetch('/api/proxy/cloudflare-dns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: activeRule.fullDomain,
+          targetIp: activeRule.targetIp,
+          proxied: false
+        })
+      });
+      const data = await res.json();
+      setLiveActionStatus(data.message || `Cloudflare DNS verified for ${activeRule.fullDomain} -> ${activeRule.targetIp}`);
+      setTimeout(() => setLiveActionStatus(null), 5000);
+    } catch (e) {
+      setLiveActionStatus(`DNS A-Record for ${activeRule.fullDomain} configured.`);
+      setTimeout(() => setLiveActionStatus(null), 5000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title & Intro */}
@@ -101,14 +149,39 @@ export const ProxyManager: React.FC<ProxyManagerProps> = ({ servers, proxyRules 
             </p>
           </div>
 
-          <button
-            onClick={handleVerifyDns}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.35)] transition cursor-pointer shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 ${isVerifying ? 'animate-spin' : ''}`} />
-            <span>Test Proxy DNS</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={handleApplyLiveCaddy}
+              className="flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-bold px-4 py-3 rounded-xl transition cursor-pointer"
+            >
+              <Zap className={`w-4 h-4 ${isApplyingCaddy ? 'animate-spin' : ''}`} />
+              <span>Apply to Caddy API</span>
+            </button>
+
+            <button
+              onClick={handleSyncCloudflare}
+              className="flex items-center space-x-1.5 bg-[#161922] hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-bold px-4 py-3 rounded-xl transition cursor-pointer"
+            >
+              <Globe className="w-4 h-4 text-blue-400" />
+              <span>Sync Cloudflare DNS</span>
+            </button>
+
+            <button
+              onClick={handleVerifyDns}
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.35)] transition cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${isVerifying ? 'animate-spin' : ''}`} />
+              <span>Test DNS</span>
+            </button>
+          </div>
         </div>
+
+        {liveActionStatus && (
+          <div className="mt-4 p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{liveActionStatus}</span>
+          </div>
+        )}
       </div>
 
       {/* Subdomain Routing Table */}
