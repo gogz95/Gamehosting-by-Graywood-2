@@ -223,6 +223,12 @@ export const ModManager: React.FC<ModManagerProps> = ({
   const [downloadStep, setDownloadStep] = useState<number>(0);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
+  // Live Modrinth API Hub State
+  const [isLiveModrinth, setIsLiveModrinth] = useState(false);
+  const [modrinthHits, setModrinthHits] = useState<any[]>([]);
+  const [modrinthLoading, setModrinthLoading] = useState(false);
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null);
+
   // Config Editor Modal State
   const [editingMod, setEditingMod] = useState<ModPlugin | null>(null);
   const [modConfigText, setModConfigText] = useState<string>('');
@@ -255,6 +261,40 @@ export const ModManager: React.FC<ModManagerProps> = ({
     const matchesCategory = selectedCategory === 'ALL' || m.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const searchModrinth = (q: string = searchTerm) => {
+    setModrinthLoading(true);
+    fetch(`/api/mods/modrinth/search?query=${encodeURIComponent(q || 'performance')}&game=${currentServer?.gameId || 'minecraft'}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setModrinthHits(data.hits || []);
+      })
+      .catch(() => {})
+      .finally(() => setModrinthLoading(false));
+  };
+
+  const handleInstallFromModrinth = async (hit: any) => {
+    if (!currentServer) return;
+    setInstallingSlug(hit.slug);
+    try {
+      const res = await fetch('/api/mods/modrinth/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serverId: currentServer.id,
+          projectSlug: hit.slug,
+          title: hit.title
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.mod) {
+        onInstallMod(currentServer.id, data.mod);
+      }
+    } catch (e) {}
+    finally {
+      setInstallingSlug(null);
+    }
+  };
 
   const handleStartSelfDownload = (mod: ModPlugin) => {
     if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
@@ -528,43 +568,122 @@ export const ModManager: React.FC<ModManagerProps> = ({
         <div className="space-y-6">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder={`Search ${currentServer?.gameName} mods...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-[#0F1117] border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition"
-              />
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={isLiveModrinth ? "Search live Modrinth API (e.g. Lithium, Chunky)..." : `Search ${currentServer?.gameName} mods...`}
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    if (isLiveModrinth) searchModrinth(e.target.value);
+                  }}
+                  className="w-full bg-[#0F1117] border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition"
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  const next = !isLiveModrinth;
+                  setIsLiveModrinth(next);
+                  if (next) searchModrinth();
+                }}
+                className={`flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                  isLiveModrinth
+                    ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                    : 'bg-[#0F1117] text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                <span>{isLiveModrinth ? 'Modrinth API Active' : 'Live Modrinth Hub'}</span>
+              </button>
             </div>
 
-            <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto">
-              {['ALL', 'Performance', 'Admin', 'Gameplay', 'Utility'].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                    selectedCategory === cat
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-[#0F1117] text-slate-400 hover:text-white border border-white/5'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+            {!isLiveModrinth && (
+              <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto">
+                {['ALL', 'Performance', 'Admin', 'Gameplay', 'Utility'].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      selectedCategory === cat
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-[#0F1117] text-slate-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredOnlineMods.map((mod) => {
-              const isAlreadyInstalled = currentServerMods.some((m) => m.name.toLowerCase() === mod.name.toLowerCase());
-              return (
-                <div
-                  key={mod.id}
-                  className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4"
-                >
+          {isLiveModrinth ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
+                <span>Modrinth REST API • Showing {modrinthHits.length} verified packages</span>
+                {modrinthLoading && <span className="text-emerald-400 animate-pulse">Fetching from Modrinth...</span>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {modrinthHits.map((hit: any) => {
+                  const isInstalled = currentServerMods.some((m) => m.name.toLowerCase() === hit.title.toLowerCase());
+                  const isInstalling = installingSlug === hit.slug;
+
+                  return (
+                    <div
+                      key={hit.project_id || hit.slug}
+                      className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 hover:border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 transition"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start space-x-3">
+                            {hit.icon_url && (
+                              <img src={hit.icon_url} alt="" className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 shrink-0" />
+                            )}
+                            <div>
+                              <h4 className="font-extrabold text-white text-base">{hit.title}</h4>
+                              <span className="text-[11px] text-slate-400">By {hit.author} • {Number(hit.downloads).toLocaleString()} downloads</span>
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                            {hit.categories?.[0] || 'Mod'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">{hit.description}</p>
+                      </div>
+
+                      <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                        <span className="text-[11px] font-mono text-slate-500">{hit.client_side === 'required' ? 'Client/Server' : 'Server-Ready'}</span>
+                        <button
+                          disabled={isInstalled || isInstalling}
+                          onClick={() => handleInstallFromModrinth(hit)}
+                          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            isInstalled
+                              ? 'bg-white/5 text-slate-500 cursor-not-allowed'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                          }`}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>{isInstalled ? 'Installed' : isInstalling ? 'Downloading .jar...' : '1-Click Install'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredOnlineMods.map((mod) => {
+                const isAlreadyInstalled = currentServerMods.some((m) => m.name.toLowerCase() === mod.name.toLowerCase());
+                return (
+                  <div
+                    key={mod.id}
+                    className="bg-[#0F1117]/80 backdrop-blur-md border border-white/5 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4"
+                  >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -611,6 +730,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
               );
             })}
           </div>
+          )}
         </div>
       )}
 

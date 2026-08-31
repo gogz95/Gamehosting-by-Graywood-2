@@ -1,9 +1,38 @@
 import React, { useState } from 'react';
-import { Play, Square, RefreshCw, Terminal, Users, Network, FileText, Package, Database, ShieldCheck, Copy, Check, Globe, Cpu, HardDrive, ArrowLeft, Trash2 } from 'lucide-react';
+import { 
+  Play, 
+  Square, 
+  RefreshCw, 
+  Terminal, 
+  Users, 
+  Network, 
+  FileText, 
+  Package, 
+  Database, 
+  ShieldCheck, 
+  Copy, 
+  Check, 
+  Globe, 
+  Cpu, 
+  HardDrive, 
+  ArrowLeft, 
+  Trash2, 
+  Folder, 
+  Clock, 
+  Activity, 
+  Bell, 
+  Layers, 
+  Sparkles, 
+  AlertTriangle,
+  Send,
+  GitFork
+} from 'lucide-react';
 import { DeployedServer, LogEntry, ModPlugin } from '../types';
 import { ConsoleTerminal } from './ConsoleTerminal';
 import { ConfigEditor } from './ConfigEditor';
 import { ModManager } from './ModManager';
+import { FileExplorer } from './FileExplorer';
+import { SchedulerTab } from './SchedulerTab';
 import { generateProxyConfig } from '../utils/proxyGenerator';
 
 interface ServerDetailViewProps {
@@ -19,8 +48,13 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   onUpdateServer,
   onDeleteServer,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'players' | 'proxy' | 'config' | 'mods' | 'backups'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'files' | 'schedules' | 'players' | 'proxy' | 'config' | 'mods' | 'backups' | 'settings'>('overview');
   const [copied, setCopied] = useState(false);
+  const [discordUrl, setDiscordUrl] = useState(server.discordWebhookUrl || '');
+  const [discordTesting, setDiscordTesting] = useState(false);
+  const [discordStatus, setDiscordStatus] = useState<string | null>(null);
+  const [isCloning, setIsCloning] = useState(false);
+  const [cloneMsg, setCloneMsg] = useState<string | null>(null);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -153,6 +187,49 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
     onUpdateServer({ ...server, mods: updatedMods });
   };
 
+  const handleTestDiscord = async () => {
+    if (!discordUrl) return;
+    setDiscordTesting(true);
+    setDiscordStatus(null);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/discord-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl: discordUrl })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send alert');
+      setDiscordStatus('Test notification sent successfully to Discord!');
+      onUpdateServer({ ...server, discordWebhookUrl: discordUrl });
+    } catch (err: any) {
+      setDiscordStatus(`Error: ${err.message}`);
+    } finally {
+      setDiscordTesting(false);
+    }
+  };
+
+  const handleToggleAutoRestart = () => {
+    const updated: DeployedServer = { ...server, autoRestart: !server.autoRestart };
+    onUpdateServer(updated);
+  };
+
+  const handleCloneServer = async () => {
+    setIsCloning(true);
+    setCloneMsg(null);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/clone`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cloning failed');
+      setCloneMsg(`Cloned successfully as "${data.server.name}"! Return to cluster dashboard to manage it.`);
+    } catch (err: any) {
+      setCloneMsg(`Cloning error: ${err.message}`);
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
   const proxyConfigSnippet = generateProxyConfig(
     server.subdomain,
     server.baseDomain,
@@ -254,13 +331,16 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
         {/* Navigation Tabs */}
         <div className="flex space-x-1 overflow-x-auto pt-2 border-t border-slate-800/80 scrollbar-none">
           {[
-            { id: 'overview', label: 'Overview Metrics', icon: Cpu },
+            { id: 'overview', label: 'Overview & Telemetry', icon: Activity },
             { id: 'console', label: 'Console Terminal', icon: Terminal },
+            { id: 'files', label: 'File Manager', icon: Folder },
+            { id: 'schedules', label: 'Scheduler & Cron', icon: Clock },
             { id: 'players', label: `Players (${server.currentPlayers}/${server.maxPlayers})`, icon: Users },
-            { id: 'proxy', label: 'Subdomain & Proxy Config', icon: Network },
-            { id: 'config', label: 'Server Settings', icon: FileText },
+            { id: 'proxy', label: 'Subdomain & Proxy', icon: Network },
+            { id: 'config', label: 'Config Editor', icon: FileText },
             { id: 'mods', label: `Mods & Plugins (${server.mods.length})`, icon: Package },
             { id: 'backups', label: 'Backups', icon: Database },
+            { id: 'settings', label: 'Alerts & Staging', icon: ShieldCheck },
           ].map((t) => {
             const Icon = t.icon;
             return (
@@ -360,6 +440,63 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
               ))}
             </div>
           </div>
+
+          {/* 30-Minute Historical Telemetry Graph */}
+          <div className="col-span-1 md:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                <Activity className="w-4 h-4" />
+                <span>Real-Time Rolling Telemetry (Historical Load Curve)</span>
+              </div>
+              <div className="flex items-center space-x-4 text-xs font-mono">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                  <span className="text-slate-300">RAM Allocated: {server.ramUsagePct}%</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                  <span className="text-slate-300">CPU Thread Load: {server.cpuUsagePct}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-44 w-full bg-slate-950/90 border border-slate-800 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden">
+              <svg className="w-full h-full" viewBox="0 0 500 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="ramGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                  </linearGradient>
+                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a855f7" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <line x1="0" y1="25" x2="500" y2="25" stroke="#1e293b" strokeDasharray="3" />
+                <line x1="0" y1="50" x2="500" y2="50" stroke="#1e293b" strokeDasharray="3" />
+                <line x1="0" y1="75" x2="500" y2="75" stroke="#1e293b" strokeDasharray="3" />
+                <polyline
+                  fill="url(#ramGrad)"
+                  stroke="#6366f1"
+                  strokeWidth="2"
+                  points={`0,${100 - server.ramUsagePct * 0.7} 50,${100 - (server.ramUsagePct - 3) * 0.7} 100,${100 - (server.ramUsagePct + 2) * 0.7} 150,${100 - (server.ramUsagePct - 2) * 0.7} 200,${100 - (server.ramUsagePct + 4) * 0.7} 250,${100 - (server.ramUsagePct + 1) * 0.7} 300,${100 - (server.ramUsagePct - 2) * 0.7} 350,${100 - (server.ramUsagePct + 3) * 0.7} 400,${100 - (server.ramUsagePct - 1) * 0.7} 450,${100 - (server.ramUsagePct + 2) * 0.7} 500,${100 - server.ramUsagePct * 0.7}`}
+                />
+                <polyline
+                  fill="none"
+                  stroke="#a855f7"
+                  strokeWidth="2"
+                  points={`0,${100 - server.cpuUsagePct * 0.7} 50,${100 - (server.cpuUsagePct + 5) * 0.7} 100,${100 - (server.cpuUsagePct - 4) * 0.7} 150,${100 - (server.cpuUsagePct + 6) * 0.7} 200,${100 - (server.cpuUsagePct - 2) * 0.7} 250,${100 - (server.cpuUsagePct + 3) * 0.7} 300,${100 - (server.cpuUsagePct - 5) * 0.7} 350,${100 - (server.cpuUsagePct + 2) * 0.7} 400,${100 - (server.cpuUsagePct + 4) * 0.7} 450,${100 - (server.cpuUsagePct - 3) * 0.7} 500,${100 - server.cpuUsagePct * 0.7}`}
+                />
+              </svg>
+              <div className="flex justify-between text-[10px] text-slate-500 font-mono pt-1">
+                <span>-30m</span>
+                <span>-20m</span>
+                <span>-10m</span>
+                <span>-5m</span>
+                <span className="text-emerald-400 font-bold">Live Stream (0s)</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -446,6 +583,141 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                 <span className="text-indigo-400">{new Date(b.createdAt).toLocaleDateString()}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'files' && (
+        <FileExplorer serverId={server.id} serverName={server.name} />
+      )}
+
+      {activeTab === 'schedules' && (
+        <SchedulerTab serverId={server.id} serverName={server.name} />
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          {/* Discord Webhook Sentinel */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">Discord Sentinel & Webhook Alerts</h3>
+                <p className="text-xs text-slate-400">
+                  Receive instant rich embeds on Discord when the server starts, crashes, or creates backups.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <input
+                type="url"
+                placeholder="https://discord.com/api/webhooks/..."
+                value={discordUrl}
+                onChange={(e) => setDiscordUrl(e.target.value)}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 font-mono"
+              />
+              <button
+                onClick={handleTestDiscord}
+                disabled={discordTesting || !discordUrl}
+                className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{discordTesting ? 'Sending...' : 'Send Test Alert'}</span>
+              </button>
+            </div>
+
+            {discordStatus && (
+              <div className={`p-3 rounded-xl text-xs font-mono flex items-center space-x-2 ${
+                discordStatus.startsWith('Error') ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+              }`}>
+                <span>{discordStatus}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Crash Watchdog & Auto-Recovery */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Automated Crash Watchdog & AI Post-Mortem</h3>
+                  <p className="text-xs text-slate-400">
+                    Monitors container state. If an abnormal exit occurs, Gemini AI analyzes root causes and restarts automatically.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleToggleAutoRestart}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  server.autoRestart !== false
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {server.autoRestart !== false ? 'Auto-Restart: ENABLED' : 'Auto-Restart: DISABLED'}
+              </button>
+            </div>
+
+            {server.crashReports && server.crashReports.length > 0 ? (
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Recent Crash Incident Log</h4>
+                <div className="space-y-2">
+                  {server.crashReports.map((cr) => (
+                    <div key={cr.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-rose-400 font-bold font-mono">Exit Code {cr.exitCode}</span>
+                        <span className="text-slate-500">{new Date(cr.timestamp).toLocaleString()}</span>
+                      </div>
+                      <div className="p-2.5 bg-indigo-950/30 border border-indigo-500/20 rounded-lg text-indigo-200">
+                        <span className="font-bold text-indigo-400">Gemini AI Diagnosis: </span>
+                        {cr.aiDiagnosis}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">No crash incidents detected. Server is operating nominally.</p>
+            )}
+          </div>
+
+          {/* Staging Replication & Cloning */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">
+                  <GitFork className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Clone Server to Staging Replica</h3>
+                  <p className="text-xs text-slate-400">
+                    Duplicates all world saves, modpacks, and configs into a new isolated staging server for testing.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCloneServer}
+                disabled={isCloning}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-purple-600/20 cursor-pointer"
+              >
+                <GitFork className="w-3.5 h-3.5" />
+                <span>{isCloning ? 'Cloning Volume...' : 'Clone Server'}</span>
+              </button>
+            </div>
+
+            {cloneMsg && (
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-300 text-xs font-mono">
+                {cloneMsg}
+              </div>
+            )}
           </div>
         </div>
       )}

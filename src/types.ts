@@ -152,6 +152,39 @@ export interface DeployedServer {
   ramUsagePct: number;
   dockerContainerId?: string;
   isLiveContainer?: boolean;
+  discordWebhookUrl?: string;
+  schedules?: ServerSchedule[];
+  crashReports?: CrashReport[];
+}
+
+export interface ServerSchedule {
+  id: string;
+  serverId: string;
+  name: string;
+  cronExpression: string; // e.g. "0 4 * * *" or "interval:6h"
+  action: 'RESTART' | 'BACKUP' | 'COMMAND';
+  command?: string;
+  enabled: boolean;
+  lastRunAt?: string;
+  nextRunAt?: string;
+}
+
+export interface FileItem {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  mtime: string;
+  ext?: string;
+}
+
+export interface CrashReport {
+  id: string;
+  timestamp: string;
+  exitCode?: number;
+  rawLog: string;
+  aiDiagnosis: string;
+  autoRestarted: boolean;
 }
 
 export interface HostNode {

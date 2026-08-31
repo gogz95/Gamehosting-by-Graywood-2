@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { DeployedServer, HostNode, ProxyRule, GameTemplate, BackupSnapshot } from '../types';
+import { DeployedServer, HostNode, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, CrashReport } from '../types';
 import { INITIAL_DEPLOYED_SERVERS, INITIAL_HOST_NODES, INITIAL_PROXY_RULES } from '../data/mockServers';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 
@@ -13,6 +13,7 @@ export interface ClusterDatabase {
   proxyRules: ProxyRule[];
   customTemplates: GameTemplate[];
   backups: BackupSnapshot[];
+  schedules: ServerSchedule[];
   enrollmentTokens: {
     token: string;
     createdAt: number;
@@ -71,6 +72,7 @@ class DatabaseManager {
           proxyRules: Array.isArray(parsed.proxyRules) ? parsed.proxyRules : INITIAL_PROXY_RULES,
           customTemplates: Array.isArray(parsed.customTemplates) ? parsed.customTemplates : [],
           backups: Array.isArray(parsed.backups) ? parsed.backups : [],
+          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           enrollmentTokens: Array.isArray(parsed.enrollmentTokens) ? parsed.enrollmentTokens : []
         };
         return this.cache;
@@ -88,6 +90,7 @@ class DatabaseManager {
       proxyRules: INITIAL_PROXY_RULES,
       customTemplates: [],
       backups: [],
+      schedules: [],
       enrollmentTokens: []
     };
 
@@ -286,6 +289,45 @@ class DatabaseManager {
     db.backups = db.backups.filter((b) => b.id !== id);
     this.persist();
     return db.backups.length < beforeLen;
+  }
+
+  // --- Schedules ---
+  public getSchedules(serverId?: string): ServerSchedule[] {
+    const db = this.load();
+    if (serverId && serverId !== 'all') {
+      return db.schedules.filter((s) => s.serverId === serverId);
+    }
+    return db.schedules;
+  }
+
+  public saveSchedule(schedule: ServerSchedule): ServerSchedule {
+    const db = this.load();
+    const index = db.schedules.findIndex((s) => s.id === schedule.id);
+    if (index >= 0) {
+      db.schedules[index] = schedule;
+    } else {
+      db.schedules.unshift(schedule);
+    }
+    this.persist();
+    return schedule;
+  }
+
+  public deleteSchedule(id: string): boolean {
+    const db = this.load();
+    const beforeLen = db.schedules.length;
+    db.schedules = db.schedules.filter((s) => s.id !== id);
+    this.persist();
+    return db.schedules.length < beforeLen;
+  }
+
+  // --- Crash Reports ---
+  public addCrashReport(serverId: string, report: CrashReport): void {
+    const db = this.load();
+    const server = db.servers.find((s) => s.id === serverId);
+    if (server) {
+      server.crashReports = [report, ...(server.crashReports || [])].slice(0, 20);
+      this.persist();
+    }
   }
 }
 

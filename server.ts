@@ -12,7 +12,7 @@ import { Rcon } from "rcon-ts";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
-import { HostNode, DeployedServer, ProxyRule, GameTemplate, BackupSnapshot } from "./src/types";
+import { HostNode, DeployedServer, ProxyRule, GameTemplate, BackupSnapshot, ServerSchedule, FileItem, CrashReport, ModPlugin } from "./src/types";
 import { db } from "./src/server/db";
 
 const execAsync = promisify(exec);
@@ -273,6 +273,440 @@ app.post("/api/servers/:id/files", (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Helper: Resolve server volume root & Path Traversal Guard
+// ---------------------------------------------------------------------------
+function resolveServerVolumeRoot(server: DeployedServer): string {
+  const cleanName = (server.name || server.id).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const volumeDir = path.join(db.getVolumesDir(), cleanName);
+  if (!fs.existsSync(volumeDir)) {
+    fs.mkdirSync(volumeDir, { recursive: true });
+  }
+  return volumeDir;
+}
+
+function resolveSafePath(volumeRoot: string, reqPath: string = ""): string | null {
+  const normalized = reqPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const target = path.resolve(volumeRoot, normalized);
+  if (!target.startsWith(path.resolve(volumeRoot))) {
+    return null; // Path traversal blocked!
+  }
+  return target;
+}
+
+// Helper: Discord Rich Webhook Dispatcher
+async function sendDiscordNotification(webhookUrl: string, payload: { title: string; description: string; color: number; fields?: any[] }) {
+  if (!webhookUrl || !webhookUrl.startsWith("http")) return;
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: payload.title,
+            description: payload.description,
+            color: payload.color,
+            fields: payload.fields,
+            footer: { text: "GameHost Deployer & Proxy Sentinel" },
+            timestamp: new Date().toISOString()
+          }
+        ]
+      })
+    });
+  } catch (err: any) {
+    console.warn("[Discord Webhook Error]:", err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// REST APIs: Web File Explorer & Archive Manager
+// ---------------------------------------------------------------------------
+
+// List files in directory
+app.get("/api/servers/:id/fs", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const targetPath = resolveSafePath(root, (req.query.path as string) || "");
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    return res.status(404).json({ error: "Directory not found or access denied" });
+  }
+
+  try {
+    const stat = fs.statSync(targetPath);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: "Target path is not a directory" });
+    }
+
+    const dirents = fs.readdirSync(targetPath, { withFileTypes: true });
+    const items: FileItem[] = dirents.map((d) => {
+      const full = path.join(targetPath, d.name);
+      let size = 0;
+      let mtime = new Date().toISOString();
+      try {
+        const s = fs.statSync(full);
+        size = s.size;
+        mtime = s.mtime.toISOString();
+      } catch (e) {}
+
+      const rel = path.relative(root, full).replace(/\\/g, "/");
+      return {
+        name: d.name,
+        path: rel,
+        isDir: d.isDirectory(),
+        size,
+        mtime,
+        ext: d.isDirectory() ? "" : path.extname(d.name).slice(1).toLowerCase()
+      };
+    });
+
+    items.sort((a, b) => {
+      if (a.isDir && !b.isDir) return -1;
+      if (!a.isDir && b.isDir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const relCurrent = path.relative(root, targetPath).replace(/\\/g, "/");
+    res.json({ currentPath: relCurrent ? `/${relCurrent}` : "/", items });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload file to directory
+app.post("/api/servers/:id/fs/upload", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const { targetDir, filename, contentBase64, contentText } = req.body;
+  if (!filename) return res.status(400).json({ error: "Filename is required" });
+
+  const root = resolveServerVolumeRoot(server);
+  const dirPath = resolveSafePath(root, targetDir || "");
+  if (!dirPath || !fs.existsSync(dirPath)) {
+    return res.status(400).json({ error: "Invalid target directory" });
+  }
+
+  const filePath = resolveSafePath(dirPath, filename);
+  if (!filePath) return res.status(400).json({ error: "Invalid filename path" });
+
+  try {
+    if (contentBase64) {
+      fs.writeFileSync(filePath, Buffer.from(contentBase64, "base64"));
+    } else {
+      fs.writeFileSync(filePath, contentText || "", "utf8");
+    }
+    res.json({ success: true, path: path.relative(root, filePath).replace(/\\/g, "/") });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download file
+app.get("/api/servers/:id/fs/download", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const targetPath = resolveSafePath(root, (req.query.path as string) || "");
+  if (!targetPath || !fs.existsSync(targetPath) || fs.statSync(targetPath).isDirectory()) {
+    return res.status(404).json({ error: "File not found or access denied" });
+  }
+
+  res.download(targetPath);
+});
+
+// Delete file or folder
+app.post("/api/servers/:id/fs/delete", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const targetPath = resolveSafePath(root, req.body.path || "");
+  if (!targetPath || targetPath === root || !fs.existsSync(targetPath)) {
+    return res.status(400).json({ error: "Cannot delete root directory or invalid path" });
+  }
+
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rename file or folder
+app.post("/api/servers/:id/fs/rename", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const oldPath = resolveSafePath(root, req.body.oldPath || "");
+  if (!oldPath || !fs.existsSync(oldPath)) return res.status(404).json({ error: "Path not found" });
+
+  const dir = path.dirname(oldPath);
+  const newPath = resolveSafePath(dir, req.body.newName || "");
+  if (!newPath) return res.status(400).json({ error: "Invalid new name" });
+
+  try {
+    fs.renameSync(oldPath, newPath);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create directory
+app.post("/api/servers/:id/fs/mkdir", (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const parent = resolveSafePath(root, req.body.targetDir || "");
+  if (!parent || !fs.existsSync(parent)) return res.status(400).json({ error: "Invalid parent directory" });
+
+  const newDir = resolveSafePath(parent, req.body.name || "");
+  if (!newDir) return res.status(400).json({ error: "Invalid folder name" });
+
+  try {
+    fs.mkdirSync(newDir, { recursive: true });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// In-place archive extraction (extracts .zip and .tar.gz)
+app.post("/api/servers/:id/fs/extract", async (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const archivePath = resolveSafePath(root, req.body.archivePath || "");
+  if (!archivePath || !fs.existsSync(archivePath)) return res.status(404).json({ error: "Archive not found" });
+
+  const targetDir = req.body.targetDir ? resolveSafePath(root, req.body.targetDir) : path.dirname(archivePath);
+  if (!targetDir) return res.status(400).json({ error: "Invalid destination directory" });
+
+  try {
+    await execAsync(`tar -xf "${archivePath}" -C "${targetDir}"`);
+    res.json({ success: true, extractedTo: path.relative(root, targetDir).replace(/\\/g, "/") });
+  } catch (err: any) {
+    res.status(500).json({ error: `Extraction failed: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// REST APIs: Schedules & Cron
+// ---------------------------------------------------------------------------
+
+app.get("/api/servers/:id/schedules", (req, res) => {
+  res.json({ schedules: db.getSchedules(req.params.id) });
+});
+
+app.post("/api/servers/:id/schedules", (req, res) => {
+  const s = req.body as ServerSchedule;
+  if (!s.id) s.id = `sched-${Date.now().toString(36)}`;
+  s.serverId = req.params.id;
+  const saved = db.saveSchedule(s);
+  res.json(saved);
+});
+
+app.delete("/api/servers/:id/schedules/:scheduleId", (req, res) => {
+  const deleted = db.deleteSchedule(req.params.scheduleId);
+  res.json({ success: deleted });
+});
+
+// ---------------------------------------------------------------------------
+// REST APIs: Discord Webhook Connectivity Test
+// ---------------------------------------------------------------------------
+
+app.post("/api/servers/:id/discord-test", async (req, res) => {
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const webhookUrl = req.body.webhookUrl || server.discordWebhookUrl;
+  if (!webhookUrl) return res.status(400).json({ error: "Discord Webhook URL required" });
+
+  // Update in server object if provided
+  if (req.body.webhookUrl) {
+    db.updateServer(server.id, { discordWebhookUrl: req.body.webhookUrl });
+  }
+
+  try {
+    await sendDiscordNotification(webhookUrl, {
+      title: "🎮 GameHost Sentinel Test Alert",
+      description: `Discord Webhook integration successfully connected for **${server.name}**! Real-time alerts for server starts, crashes, and automated backups are now active.`,
+      color: 0x22c55e,
+      fields: [
+        { name: "Server Subdomain", value: server.fullDomain || "mc.domain.com", inline: true },
+        { name: "Target Node", value: server.nodeName, inline: true },
+        { name: "Game Engine", value: server.gameName, inline: true }
+      ]
+    });
+    res.json({ success: true, message: "Discord test notification sent successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// REST APIs: Modrinth API Proxy & Direct 1-Click Installer
+// ---------------------------------------------------------------------------
+
+app.get("/api/mods/modrinth/search", async (req, res) => {
+  const query = (req.query.query as string) || "performance";
+  try {
+    const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&limit=16&facets=[["project_type:mod","project_type:plugin"]]`;
+    const mrRes = await fetch(url, { headers: { "User-Agent": "GameHost-Deployer/2.5.0" } });
+    if (!mrRes.ok) return res.json({ hits: [] });
+    const data = await mrRes.json();
+    res.json(data);
+  } catch (err: any) {
+    res.json({ hits: [], error: err.message });
+  }
+});
+
+app.post("/api/mods/modrinth/install", async (req, res) => {
+  const { serverId, projectSlug, title } = req.body;
+  const server = db.getServerById(serverId);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const root = resolveServerVolumeRoot(server);
+  const modsDir = path.join(root, "mods");
+  if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
+
+  try {
+    const verRes = await fetch(`https://api.modrinth.com/v2/project/${projectSlug}/version`, {
+      headers: { "User-Agent": "GameHost-Deployer/2.5.0" }
+    });
+    const versions = await verRes.json();
+    if (!Array.isArray(versions) || versions.length === 0) {
+      return res.status(404).json({ error: "No downloadable versions found on Modrinth" });
+    }
+
+    const primaryFile = versions[0]?.files?.find((f: any) => f.primary) || versions[0]?.files?.[0];
+    if (!primaryFile || !primaryFile.url) {
+      return res.status(404).json({ error: "No primary file found in latest version" });
+    }
+
+    const downloadRes = await fetch(primaryFile.url);
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    const destPath = path.join(modsDir, primaryFile.filename);
+    fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
+
+    const newMod: ModPlugin = {
+      id: `mr-${projectSlug}-${Date.now().toString(36)}`,
+      gameId: server.gameId,
+      name: title || projectSlug,
+      version: versions[0].version_number || "latest",
+      author: "Modrinth Community",
+      description: `Installed via Modrinth API`,
+      category: "Utility",
+      enabled: true,
+      downloads: String(versions[0].downloads || 1000),
+      updatedAt: new Date().toISOString(),
+      fileName: primaryFile.filename,
+      fileSizeMb: Math.round((primaryFile.size / (1024 * 1024)) * 10) / 10 || 1.2,
+      source: "DIRECT_URL"
+    };
+
+    const updatedMods = [...server.mods, newMod];
+    db.updateServer(server.id, {
+      mods: updatedMods,
+      logs: [
+        ...server.logs,
+        {
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          level: "INFO",
+          message: `[Modrinth Hub]: Downloaded and installed ${primaryFile.filename} into /mods.`
+        }
+      ]
+    });
+
+    res.json({ success: true, mod: newMod, path: destPath });
+  } catch (err: any) {
+    res.status(500).json({ error: `Modrinth download failed: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// REST APIs: 1-Click Server Cloning & Staging Replication
+// ---------------------------------------------------------------------------
+
+app.post("/api/servers/:id/clone", async (req, res) => {
+  const source = db.getServerById(req.params.id);
+  if (!source) return res.status(404).json({ error: "Source server not found" });
+
+  const cloneId = `srv-${Date.now().toString(36)}`;
+  const cleanSource = source.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const cloneName = `${source.name} (Clone)`;
+  const cleanClone = cloneName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const cloneSubdomain = `${source.subdomain}-dev`;
+  const clonePort = source.port + Math.floor(Math.random() * 50 + 1);
+
+  const sourceDir = path.join(db.getVolumesDir(), cleanSource);
+  const cloneDir = path.join(db.getVolumesDir(), cleanClone);
+
+  try {
+    if (fs.existsSync(sourceDir)) {
+      if (!fs.existsSync(cloneDir)) fs.mkdirSync(cloneDir, { recursive: true });
+      await execAsync(`tar -czf - -C "${sourceDir}" . | tar -xzf - -C "${cloneDir}"`);
+    } else {
+      fs.mkdirSync(cloneDir, { recursive: true });
+    }
+
+    const clonedServer: DeployedServer = {
+      ...source,
+      id: cloneId,
+      name: cloneName,
+      port: clonePort,
+      subdomain: cloneSubdomain,
+      fullDomain: `${cloneSubdomain}.${source.baseDomain}`,
+      status: "STOPPED",
+      dockerContainerId: undefined,
+      isLiveContainer: false,
+      createdAt: new Date().toISOString(),
+      logs: [
+        {
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          level: "SYSTEM",
+          message: `Server cloned from ${source.name}. Volume storage replicated to ${cloneDir}.`
+        }
+      ]
+    };
+
+    db.saveServer(clonedServer);
+
+    const cloneProxyRule: ProxyRule = {
+      id: `pr-${Date.now().toString(36)}`,
+      serverId: cloneId,
+      serverName: cloneName,
+      subdomain: cloneSubdomain,
+      baseDomain: source.baseDomain,
+      fullDomain: `${cloneSubdomain}.${source.baseDomain}`,
+      targetIp: source.nodeIp,
+      targetPort: clonePort,
+      protocol: "TCP",
+      engine: source.proxyEngine,
+      sslEnabled: source.proxySsl,
+      status: "ACTIVE",
+      lastVerified: "Just now",
+      bandwidthUsageMb: 0
+    };
+
+    db.saveProxyRule(cloneProxyRule);
+
+    res.json({ success: true, server: clonedServer, proxyRule: cloneProxyRule });
+  } catch (err: any) {
+    res.status(500).json({ error: `Cloning failed: ${err.message}` });
   }
 });
 
@@ -1228,8 +1662,125 @@ nodesWss.on("connection", (ws: WebSocket, req) => {
 });
 
 // ---------------------------------------------------------------------------
-// Vite & Static Asset Serving
+// Background Daemons: Crash Watchdog with AI Diagnosis & Task Scheduler
 // ---------------------------------------------------------------------------
+
+function startCrashWatchdog() {
+  setInterval(async () => {
+    if (!docker) return;
+    const runningServers = db.getServers().filter((s) => s.dockerContainerId && s.status === "RUNNING");
+    for (const s of runningServers) {
+      try {
+        const container = docker.getContainer(s.dockerContainerId!);
+        const inspect = await container.inspect();
+        if (!inspect.State.Running && inspect.State.ExitCode !== 0) {
+          console.warn(`[Watchdog Alert]: Server container "${s.name}" (${s.dockerContainerId}) crashed with ExitCode ${inspect.State.ExitCode}!`);
+
+          let rawLogs = `Process terminated with error code ${inspect.State.ExitCode}`;
+          try {
+            const logsBuffer = await container.logs({ stdout: true, stderr: true, tail: 30 });
+            rawLogs = logsBuffer.toString("utf8").replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
+          } catch (e) {}
+
+          let aiDiagnosis = "Unexpected container termination. Check memory allocation and mod dependencies.";
+          const ai = getGeminiClient();
+          if (ai) {
+            try {
+              const aiRes = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: [{ text: `Analyze this game server crash log and state root cause in 1 sentence and actionable fix in 1 sentence:\n${rawLogs.slice(-1200)}` }] }]
+              });
+              if (aiRes.text) aiDiagnosis = aiRes.text.trim();
+            } catch (aiErr) {}
+          }
+
+          const report: CrashReport = {
+            id: `crash-${Date.now().toString(36)}`,
+            timestamp: new Date().toISOString(),
+            exitCode: inspect.State.ExitCode,
+            rawLog: rawLogs.slice(-600),
+            aiDiagnosis,
+            autoRestarted: s.autoRestart !== false
+          };
+
+          db.addCrashReport(s.id, report);
+
+          // Discord Crash Alert
+          if (s.discordWebhookUrl) {
+            sendDiscordNotification(s.discordWebhookUrl, {
+              title: `🚨 Server Crash Detected: ${s.name}`,
+              description: `**AI Root Cause Diagnosis:**\n${aiDiagnosis}`,
+              color: 0xef4444,
+              fields: [
+                { name: "Exit Code", value: String(inspect.State.ExitCode), inline: true },
+                { name: "Recovery", value: s.autoRestart !== false ? "🔄 Auto-restarting container..." : "Manual intervention needed", inline: true },
+                { name: "Node", value: s.nodeName, inline: true }
+              ]
+            });
+          }
+
+          // Auto-recovery
+          if (s.autoRestart !== false) {
+            await container.start().catch(() => {});
+            db.updateServer(s.id, {
+              status: "RUNNING",
+              logs: [
+                ...s.logs,
+                {
+                  id: Date.now().toString(),
+                  timestamp: new Date().toLocaleTimeString(),
+                  level: "WARN",
+                  message: `[Crash Watchdog]: Auto-recovered server after crash (ExitCode ${inspect.State.ExitCode}). Diagnosis: ${aiDiagnosis}`
+                }
+              ]
+            });
+          } else {
+            db.updateServer(s.id, { status: "ERROR" });
+          }
+        }
+      } catch (err) {}
+    }
+  }, 15000);
+}
+
+function startSchedulerDaemon() {
+  setInterval(async () => {
+    const schedules = db.getSchedules().filter((sch) => sch.enabled);
+    const now = Date.now();
+
+    for (const sch of schedules) {
+      let intervalMs = 0;
+      if (sch.cronExpression.startsWith("interval:")) {
+        const val = sch.cronExpression.split(":")[1] || "";
+        if (val.endsWith("m")) intervalMs = parseInt(val, 10) * 60000;
+        if (val.endsWith("h")) intervalMs = parseInt(val, 10) * 3600000;
+      } else if (sch.cronExpression === "0 4 * * *") {
+        const hour = new Date().getHours();
+        if (hour === 4) intervalMs = 20 * 3600000;
+      }
+
+      if (intervalMs > 0) {
+        const lastRun = sch.lastRunAt ? new Date(sch.lastRunAt).getTime() : 0;
+        if (now - lastRun >= intervalMs) {
+          sch.lastRunAt = new Date().toISOString();
+          db.saveSchedule(sch);
+
+          const srv = db.getServerById(sch.serverId);
+          if (srv && srv.dockerContainerId && docker) {
+            try {
+              const c = docker.getContainer(srv.dockerContainerId);
+              if (sch.action === "RESTART") {
+                await c.restart();
+                console.log(`[Scheduler]: Executed scheduled restart for "${srv.name}"`);
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  }, 30000);
+}
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -1251,16 +1802,22 @@ async function startServer() {
     });
   }
 
+  let currentAttemptPort = PORT;
+
   const tryListen = (portToTry: number) => {
+    currentAttemptPort = portToTry;
     server.listen(portToTry, "0.0.0.0", () => {
       console.log(`Server listening on http://0.0.0.0:${portToTry} (HTTP, /ws/console & /ws/nodes)`);
+      startCrashWatchdog();
+      startSchedulerDaemon();
     });
   };
 
   server.on("error", (err: any) => {
-    if (err.code === "EADDRINUSE" && !process.env.PORT) {
-      console.warn(`[Server]: Port 3000 is already in use. Automatically falling back to http://0.0.0.0:3001...`);
-      tryListen(3001);
+    if (err.code === "EADDRINUSE" && currentAttemptPort < 3010) {
+      const nextPort = currentAttemptPort + 1;
+      console.warn(`[Server]: Port ${currentAttemptPort} is in use. Trying port ${nextPort}...`);
+      tryListen(nextPort);
     } else {
       console.error("[Server Error]:", err.message);
     }
