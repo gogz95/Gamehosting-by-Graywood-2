@@ -828,6 +828,217 @@ app.post("/api/mods/modrinth/install", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// REST APIs: Thunderstore Community REST API Proxy & 1-Click Installer
+// ---------------------------------------------------------------------------
+
+const thunderstoreCache = new Map<string, { data: any[]; cachedAt: number }>();
+
+app.get("/api/mods/thunderstore/search", async (req, res) => {
+  const community = (req.query.community as string) || "valheim";
+  const query = ((req.query.query as string) || "").toLowerCase().trim();
+
+  try {
+    const cached = thunderstoreCache.get(community);
+    let packages: any[] = [];
+    if (cached && Date.now() - cached.cachedAt < 10 * 60 * 1000) {
+      packages = cached.data;
+    } else {
+      const url = `https://thunderstore.io/c/${encodeURIComponent(community)}/api/v1/package/`;
+      const tsRes = await fetch(url, { headers: { "User-Agent": "GameHost-Deployer/2.5.0" } });
+      if (!tsRes.ok) return res.json({ packages: [] });
+      packages = await tsRes.json();
+      thunderstoreCache.set(community, { data: packages, cachedAt: Date.now() });
+    }
+
+    let filtered = packages;
+    if (query) {
+      filtered = packages.filter(
+        (p) =>
+          p.name?.toLowerCase().includes(query) ||
+          p.full_name?.toLowerCase().includes(query) ||
+          p.owner?.toLowerCase().includes(query) ||
+          p.categories?.some((c: string) => c.toLowerCase().includes(query)) ||
+          p.versions?.[0]?.description?.toLowerCase().includes(query)
+      );
+    }
+
+    const results = filtered.slice(0, 24).map((p) => {
+      const latest = p.versions?.[0] || {};
+      return {
+        uuid4: p.uuid4 || p.full_name,
+        name: p.name,
+        fullName: p.full_name,
+        owner: p.owner,
+        packageUrl: p.package_url,
+        categories: p.categories || [],
+        ratingScore: p.rating_score,
+        isPinned: p.is_pinned,
+        isDeprecated: p.is_deprecated,
+        versionNumber: latest.version_number || "1.0.0",
+        downloadUrl: latest.download_url,
+        downloads: latest.downloads || 0,
+        icon: latest.icon,
+        description: latest.description || "Thunderstore community mod"
+      };
+    });
+
+    res.json({ count: results.length, packages: results });
+  } catch (err: any) {
+    res.json({ packages: [], error: err.message });
+  }
+});
+
+app.post("/api/mods/thunderstore/install", async (req, res) => {
+  const { serverId, downloadUrl, name, versionNumber } = req.body;
+  const server = db.getServerById(serverId);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+  if (!downloadUrl) return res.status(400).json({ error: "downloadUrl required" });
+
+  const root = resolveServerVolumeRoot(server);
+  const targetDir = path.join(root, "BepInEx", "plugins");
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+  try {
+    const downloadRes = await fetch(downloadUrl, { headers: { "User-Agent": "GameHost-Deployer/2.5.0" } });
+    if (!downloadRes.ok) throw new Error(`Download returned HTTP ${downloadRes.status}`);
+
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    const tempZip = path.join(root, `temp-ts-${Date.now()}.zip`);
+    fs.writeFileSync(tempZip, Buffer.from(arrayBuffer));
+
+    await execAsync(`tar -xf "${tempZip}" -C "${targetDir}"`);
+    try { fs.unlinkSync(tempZip); } catch (e) {}
+
+    const newMod: ModPlugin = {
+      id: `ts-${name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}-${Date.now().toString(36)}`,
+      gameId: server.gameId,
+      name,
+      version: versionNumber || "1.0.0",
+      author: "Thunderstore Community",
+      description: `Installed from Thunderstore package`,
+      category: "Gameplay",
+      enabled: true,
+      downloads: "10K+",
+      updatedAt: new Date().toISOString(),
+      fileName: `${name}.zip`,
+      fileSizeMb: Math.round((arrayBuffer.byteLength / (1024 * 1024)) * 10) / 10 || 1.0,
+      source: "MOD_HUB"
+    };
+
+    const updatedMods = [...server.mods, newMod];
+    db.updateServer(server.id, {
+      mods: updatedMods,
+      logs: [
+        ...server.logs,
+        {
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          level: "INFO",
+          message: `[Thunderstore Hub]: Installed ${name} v${versionNumber} into /BepInEx/plugins.`
+        }
+      ]
+    });
+
+    res.json({ success: true, mod: newMod });
+  } catch (err: any) {
+    res.status(500).json({ error: `Thunderstore installation failed: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// REST APIs: Universal Direct URL & Modpack Ingestion Engine
+// ---------------------------------------------------------------------------
+
+app.post("/api/mods/url-install", async (req, res) => {
+  const { serverId, url, targetFolder = "mods", autoExtract = true } = req.body;
+  const server = db.getServerById(serverId);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+  if (!url || typeof url !== "string" || !url.startsWith("http")) {
+    return res.status(400).json({ error: "A valid http/https download URL is required" });
+  }
+
+  const root = resolveServerVolumeRoot(server);
+  const targetDir = targetFolder === "root" ? root : path.join(root, targetFolder);
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+  try {
+    const downloadRes = await fetch(url, { headers: { "User-Agent": "GameHost-Deployer/2.5.0" } });
+    if (!downloadRes.ok) throw new Error(`Download server returned HTTP ${downloadRes.status}`);
+
+    let filename = "";
+    const cd = downloadRes.headers.get("content-disposition");
+    if (cd && cd.includes("filename=")) {
+      const match = cd.match(/filename=["']?([^"';]+)["']?/);
+      if (match && match[1]) filename = match[1];
+    }
+    if (!filename) {
+      try {
+        const parsedUrl = new URL(url);
+        filename = path.basename(parsedUrl.pathname) || `download-${Date.now()}`;
+      } catch (e) {
+        filename = `download-${Date.now()}`;
+      }
+    }
+
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    const savePath = path.join(targetDir, filename);
+    fs.writeFileSync(savePath, Buffer.from(arrayBuffer));
+
+    let extracted = false;
+    const lower = filename.toLowerCase();
+    const isArchive = lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") || lower.endsWith(".mrpack");
+    if (isArchive && autoExtract) {
+      try {
+        await execAsync(`tar -xf "${savePath}" -C "${targetDir}"`);
+        extracted = true;
+      } catch (err: any) {
+        console.warn("[Auto-Extract Warning]:", err.message);
+      }
+    }
+
+    const newMod: ModPlugin = {
+      id: `url-${Date.now().toString(36)}`,
+      gameId: server.gameId,
+      name: filename.replace(/\.(zip|tar\.gz|tgz|jar|pak|mrpack)$/i, ""),
+      version: "1.0.0",
+      author: "Remote Download",
+      description: `Ingested from direct URL: ${url}`,
+      category: isArchive ? "Modpack" : "Utility",
+      enabled: true,
+      downloads: "1",
+      updatedAt: new Date().toISOString(),
+      fileName: filename,
+      fileSizeMb: Math.round((arrayBuffer.byteLength / (1024 * 1024)) * 10) / 10 || 1.0,
+      source: "DIRECT_URL"
+    };
+
+    const updatedMods = [...server.mods, newMod];
+    db.updateServer(server.id, {
+      mods: updatedMods,
+      logs: [
+        ...server.logs,
+        {
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          level: "INFO",
+          message: `[URL Ingestion]: Downloaded ${filename} (${Math.round((arrayBuffer.byteLength / (1024 * 1024)) * 10) / 10} MB)${extracted ? " and auto-extracted archive" : ""} into /${targetFolder}.`
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      filename,
+      sizeBytes: arrayBuffer.byteLength,
+      extracted,
+      mod: newMod
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: `URL Ingestion failed: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // REST APIs: 1-Click Server Cloning & Staging Replication
 // ---------------------------------------------------------------------------
 

@@ -1,7 +1,68 @@
 {
   "version": "2.5.0",
-  "updatedAt": "2026-08-31T20:37:29.100Z",
-  "servers": [],
+  "updatedAt": "2026-09-01T07:00:03.464Z",
+  "servers": [
+    {
+      "id": "srv-mtibhwby",
+      "name": "Minecraft Java Edition Server",
+      "gameId": "minecraft-java",
+      "gameName": "Minecraft Java Edition",
+      "status": "RUNNING",
+      "nodeId": "node-local-master",
+      "nodeName": "Local Host (Master Node)",
+      "nodeIp": "127.0.0.1",
+      "port": 25565,
+      "queryPort": 25565,
+      "rconPort": 25575,
+      "ramAllocatedGb": 4,
+      "cpuAllocatedCores": 2,
+      "diskAllocatedGb": 20,
+      "currentPlayers": 0,
+      "maxPlayers": 20,
+      "playersList": [],
+      "uptimeSeconds": 12,
+      "subdomain": "",
+      "baseDomain": "srv.playcraft.gg",
+      "fullDomain": ".srv.playcraft.gg",
+      "proxyEngine": "NGINX",
+      "proxyStatus": "ACTIVE",
+      "proxySsl": true,
+      "createdAt": "2026-09-01T06:59:59.854Z",
+      "autoRestart": true,
+      "cpuUsagePct": 12,
+      "ramUsagePct": 24,
+      "envVars": {
+        "EULA": "TRUE",
+        "TYPE": "PAPER",
+        "VERSION": "1.20.4",
+        "MEMORY": "4G",
+        "MAX_PLAYERS": "20",
+        "MOTD": "Powered by GameHost Proxy Deployer",
+        "WORLD_NAME": "NewWorld",
+        "ADMIN_PASS": "test1234"
+      },
+      "activeConfigFile": "server.properties",
+      "configContent": "# Minecraft Server Properties\nserver-port=25565\nenable-rcon=true\nrcon.port=25575\nrcon.password=SecureAdminPass123!\ngamemode=survival\ndifficulty=normal\nmax-players=20\nmotd=Welcome to our Custom GameHost Minecraft Server!\nonline-mode=true\npvp=true\nview-distance=10\nspawn-protection=16\nallow-flight=false\nenable-command-block=true\n",
+      "logs": [
+        {
+          "id": "1",
+          "timestamp": "8:59:59 AM",
+          "level": "SYSTEM",
+          "message": "Server container initialized on node Local Host (Master Node)"
+        },
+        {
+          "id": "2",
+          "timestamp": "8:59:59 AM",
+          "level": "INFO",
+          "message": "Proxy stream configured: .srv.playcraft.gg -> 127.0.0.1:25565"
+        }
+      ],
+      "mods": [],
+      "backups": [],
+      "dockerContainerId": "sim-mtibhwnt",
+      "isLiveContainer": false
+    }
+  ],
   "hostNodes": [
     {
       "id": "node-local-master",
@@ -35,7 +96,24 @@
       ]
     }
   ],
-  "proxyRules": [],
+  "proxyRules": [
+    {
+      "id": "pr-mtibhz46",
+      "serverId": "srv-mtibhwby",
+      "serverName": "Minecraft Java Edition Server",
+      "subdomain": "",
+      "baseDomain": "srv.playcraft.gg",
+      "fullDomain": ".srv.playcraft.gg",
+      "targetIp": "127.0.0.1",
+      "targetPort": 25565,
+      "protocol": "TCP",
+      "engine": "NGINX",
+      "sslEnabled": true,
+      "status": "ACTIVE",
+      "lastVerified": "Just now",
+      "bandwidthUsageMb": 0
+    }
+  ],
   "customTemplates": [],
   "backups": [],
   "schedules": [],

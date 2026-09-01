@@ -56,7 +56,7 @@ export interface ModPlugin {
   version: string;
   author: string;
   description: string;
-  category: 'Performance' | 'Gameplay' | 'Admin' | 'World' | 'Utility' | 'Core';
+  category: 'Performance' | 'Gameplay' | 'Admin' | 'World' | 'Utility' | 'Core' | 'Modpack';
   enabled: boolean;
   downloads: string;
   updatedAt: string;
