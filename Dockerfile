@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # GameHost Deployer & Proxy — Master Panel Production Dockerfile
 # Multi-stage build: builds frontend + bundles backend, runs minimal image
 # Node.js 20 LTS | Alpine | Proxmox-compatible
@@ -52,8 +52,13 @@ COPY --from=builder /app/dist ./dist
 # Ensure persistent data directories exist (overridden by host volume mount)
 RUN mkdir -p /app/data/volumes /app/data/backups
 
-# Seed a clean db.json on first run (host volume overrides in production)
-COPY data/db.json ./data/db.json
+# Copy clean seed database — used ONLY on first container start if no volume is mounted
+# The entrypoint script copies this to db.json only when db.json doesn't exist yet
+COPY data/db.seed.json ./data/db.seed.json
+
+# Copy entrypoint bootstrap script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 # ─── Environment ────────────────────────────────────────────────────────────
 ENV NODE_ENV=production
@@ -67,4 +72,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # ─── Entrypoint ─────────────────────────────────────────────────────────────
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "dist/server.cjs"]

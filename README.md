@@ -5,8 +5,12 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-v20%2B-green.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![CI](https://github.com/gogz95/Gamehosting-by-Graywood-2/actions/workflows/ci.yml/badge.svg)](https://github.com/gogz95/Gamehosting-by-Graywood-2/actions/workflows/ci.yml)
+[![Docker Image](https://img.shields.io/badge/GHCR-latest-0d1117.svg?logo=github&logoColor=white)](https://github.com/gogz95/Gamehosting-by-Graywood-2/pkgs/container/gamehosting-by-graywood-2)
+[![Proxmox](https://img.shields.io/badge/Proxmox-VE-E57000.svg?logo=proxmox&logoColor=white)](PROXMOX.md)
 [![License](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Production-Ready-emerald.svg)]()
+[![Version](https://img.shields.io/badge/Version-2.5.0-purple.svg)](CHANGELOG.md)
+
 
 **Next-generation, zero-dependency game server orchestrator with 1-click Docker deployments, multi-protocol stream proxying, remote worker clustering, and AI crash diagnosis.**
 

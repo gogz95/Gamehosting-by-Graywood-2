@@ -1,0 +1,31 @@
+﻿{
+  "version": "2.5.0",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "servers": [],
+  "hostNodes": [
+    {
+      "id": "node-local-master",
+      "name": "Master Node (Local)",
+      "ipAddress": "127.0.0.1",
+      "location": "Local",
+      "provider": "Local Docker Engine",
+      "osType": "LINUX",
+      "cpuModel": "Local CPU",
+      "cpuCores": 4,
+      "totalRamGb": 8,
+      "totalDiskGb": 100,
+      "usedDiskGb": 0,
+      "status": "ONLINE",
+      "dockerVersion": "Docker Engine",
+      "agentVersion": "2.5.0",
+      "isLocal": true,
+      "enrolledAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "proxyRules": [],
+  "customTemplates": [],
+  "backups": [],
+  "schedules": [],
+  "users": [],
+  "enrollmentTokens": []
+}

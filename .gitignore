@@ -6,12 +6,20 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime data — volume-mounted in Docker, never committed
 /data/volumes/
 /data/backups/
 /data/*.log
+/data/db.json
+
+# SFTP host key — auto-generated at runtime, NEVER commit private keys
+/data/sftp_host_rsa
+/data/sftp_host_rsa.pub
+/data/*.pem
+/data/*.key
 
 # Nginx TLS certificates (never commit private keys)
 nginx/certs/*.pem
 nginx/certs/*.crt
 nginx/certs/*.key
-
