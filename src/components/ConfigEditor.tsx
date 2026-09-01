@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Save, FileText, Check, RotateCcw, AlertCircle, Sparkles } from 'lucide-react';
 
 interface ConfigEditorProps {
@@ -10,6 +10,10 @@ interface ConfigEditorProps {
 export const ConfigEditor: React.FC<ConfigEditorProps> = ({ filename, initialContent, onSave }) => {
   const [content, setContent] = useState(initialContent);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent, filename]);
 
   const hasUnsavedChanges = content !== initialContent;
 

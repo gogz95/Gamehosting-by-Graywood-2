@@ -1,7 +1,61 @@
 {
   "version": "2.5.0",
-  "updatedAt": "2026-09-01T07:44:01.659Z",
-  "servers": [],
+  "updatedAt": "2026-09-01T09:27:28.245Z",
+  "servers": [
+    {
+      "id": "srv-test-1",
+      "name": "Test Verification Server",
+      "gameId": "minecraft-java",
+      "nodeId": "node-local-master",
+      "port": 25565,
+      "status": "STOPPED",
+      "subdomain": "test",
+      "baseDomain": "localhost",
+      "fullDomain": "test.localhost",
+      "ramAllocatedGb": 4,
+      "cpuAllocatedCores": 2,
+      "logs": [
+        {
+          "id": "1788254797541",
+          "timestamp": "11:26:37 AM",
+          "level": "SYSTEM",
+          "message": "[Egg Installer]: Preparing server environment for \"Test Verification Server\" using image \"ghcr.io/pterodactyl/installers:debian\"..."
+        },
+        {
+          "id": "1788254797555",
+          "timestamp": "11:26:37 AM",
+          "level": "INFO",
+          "message": "[Egg Installer]: Pulling installation container ghcr.io/pterodactyl/installers:debian..."
+        },
+        {
+          "id": "1788254797561",
+          "timestamp": "11:26:37 AM",
+          "level": "WARN",
+          "message": "[Egg Installer Notice]: Native container execution bypassed (connect ENOENT //./pipe/docker_engine). Environment prepared."
+        },
+        {
+          "id": "1788254848228",
+          "timestamp": "11:27:28 AM",
+          "level": "SYSTEM",
+          "message": "[Egg Installer]: Preparing server environment for \"Test Verification Server\" using image \"ghcr.io/pterodactyl/installers:debian\"..."
+        },
+        {
+          "id": "1788254848242",
+          "timestamp": "11:27:28 AM",
+          "level": "INFO",
+          "message": "[Egg Installer]: Pulling installation container ghcr.io/pterodactyl/installers:debian..."
+        },
+        {
+          "id": "1788254848249",
+          "timestamp": "11:27:28 AM",
+          "level": "WARN",
+          "message": "[Egg Installer Notice]: Native container execution bypassed (connect ENOENT //./pipe/docker_engine). Environment prepared."
+        }
+      ],
+      "mods": [],
+      "backups": []
+    }
+  ],
   "hostNodes": [
     {
       "id": "node-local-master",
@@ -36,7 +90,113 @@
     }
   ],
   "proxyRules": [],
-  "customTemplates": [],
+  "customTemplates": [
+    {
+      "id": "egg-paper-mtighjyh",
+      "name": "Paper",
+      "gameKey": "paper",
+      "category": "Sandbox",
+      "description": "High performance Spigot fork that aims to fix gameplay and mechanics inconsistencies.",
+      "icon": "Box",
+      "banner": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80",
+      "defaultPort": 25565,
+      "protocol": "TCP",
+      "defaultRamGb": 4,
+      "minRamGb": 2,
+      "defaultCpuCores": 2,
+      "dockerImage": "ghcr.io/pterodactyl/yolks:java_8",
+      "proxyTypeDefault": "NGINX",
+      "recommendedSubdomainPrefix": "paper",
+      "configFiles": [
+        {
+          "filename": "config.json",
+          "description": "Default server config",
+          "defaultContent": "{}\n"
+        }
+      ],
+      "defaultEnvVars": {
+        "MINECRAFT_VERSION": "latest",
+        "SERVER_JARFILE": "server.jar",
+        "DL_PATH": "",
+        "BUILD_NUMBER": "latest"
+      },
+      "features": [
+        "Pterodactyl Egg Imported",
+        "Yolks Native",
+        "Custom Variables"
+      ]
+    },
+    {
+      "id": "egg-paper-mtigi0wp",
+      "name": "Paper",
+      "gameKey": "paper",
+      "category": "Sandbox",
+      "description": "High performance Spigot fork that aims to fix gameplay and mechanics inconsistencies.",
+      "icon": "Box",
+      "banner": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80",
+      "defaultPort": 25565,
+      "protocol": "TCP",
+      "defaultRamGb": 4,
+      "minRamGb": 2,
+      "defaultCpuCores": 2,
+      "dockerImage": "ghcr.io/pterodactyl/yolks:java_8",
+      "proxyTypeDefault": "NGINX",
+      "recommendedSubdomainPrefix": "paper",
+      "configFiles": [
+        {
+          "filename": "config.json",
+          "description": "Default server config",
+          "defaultContent": "{}\n"
+        }
+      ],
+      "defaultEnvVars": {
+        "MINECRAFT_VERSION": "latest",
+        "SERVER_JARFILE": "server.jar",
+        "DL_PATH": "",
+        "BUILD_NUMBER": "latest"
+      },
+      "features": [
+        "Pterodactyl Egg Imported",
+        "Yolks Native",
+        "Custom Variables"
+      ]
+    },
+    {
+      "id": "egg-paper-mtigi9ry",
+      "name": "Paper",
+      "gameKey": "paper",
+      "category": "Sandbox",
+      "description": "High performance Spigot fork that aims to fix gameplay and mechanics inconsistencies.",
+      "icon": "Box",
+      "banner": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80",
+      "defaultPort": 25565,
+      "protocol": "TCP",
+      "defaultRamGb": 4,
+      "minRamGb": 2,
+      "defaultCpuCores": 2,
+      "dockerImage": "ghcr.io/pterodactyl/yolks:java_8",
+      "proxyTypeDefault": "NGINX",
+      "recommendedSubdomainPrefix": "paper",
+      "configFiles": [
+        {
+          "filename": "config.json",
+          "description": "Default server config",
+          "defaultContent": "{}\n"
+        }
+      ],
+      "defaultEnvVars": {
+        "MINECRAFT_VERSION": "latest",
+        "SERVER_JARFILE": "server.jar",
+        "DL_PATH": "",
+        "BUILD_NUMBER": "latest"
+      },
+      "features": [
+        "Pterodactyl Egg Imported",
+        "Yolks Native",
+        "Custom Variables"
+      ]
+    }
+  ],
   "backups": [],
   "schedules": [],
   "users": [

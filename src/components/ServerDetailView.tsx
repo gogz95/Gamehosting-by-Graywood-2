@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Play, 
   Square, 
@@ -25,21 +25,36 @@ import {
   Sparkles, 
   AlertTriangle,
   Send,
-  GitFork
+  GitFork,
+  HardDriveDownload,
+  Key,
+  Lock,
+  RotateCcw,
+  Server as ServerIcon
 } from 'lucide-react';
-import { DeployedServer, LogEntry, ModPlugin } from '../types';
+import { DeployedServer, LogEntry, ModPlugin, ServerStats } from '../types';
 import { ConsoleTerminal } from './ConsoleTerminal';
 import { ConfigEditor } from './ConfigEditor';
 import { ModManager } from './ModManager';
 import { FileExplorer } from './FileExplorer';
 import { SchedulerTab } from './SchedulerTab';
+import { ResourceGraph } from './ResourceGraph';
 import { generateProxyConfig } from '../utils/proxyGenerator';
+
+interface SftpDetails {
+  host: string;
+  port: number;
+  usernameFormat: string;
+  recommendedClient: string;
+  serverVolumePath: string;
+}
 
 interface ServerDetailViewProps {
   server: DeployedServer;
   onBack: () => void;
   onUpdateServer: (updatedServer: DeployedServer) => void;
   onDeleteServer: (serverId: string) => void;
+  onServerAdded?: (newServer: DeployedServer) => void;
 }
 
 export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
@@ -47,6 +62,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   onBack,
   onUpdateServer,
   onDeleteServer,
+  onServerAdded,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'files' | 'schedules' | 'players' | 'proxy' | 'config' | 'mods' | 'backups' | 'settings'>('overview');
   const [copied, setCopied] = useState(false);
@@ -55,6 +71,60 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   const [discordStatus, setDiscordStatus] = useState<string | null>(null);
   const [isCloning, setIsCloning] = useState(false);
   const [cloneMsg, setCloneMsg] = useState<string | null>(null);
+
+  // Live Resource Telemetry History Buffers (Last 30 points)
+  const [cpuHistory, setCpuHistory] = useState<number[]>([15, 18, 22, 19, 24, 28, 25, 20]);
+  const [ramHistory, setRamHistory] = useState<number[]>([35, 36, 36, 37, 38, 38, 39, 40]);
+  const [netRxHistory, setNetRxHistory] = useState<number[]>([120, 140, 180, 150, 210, 190]);
+  const [currentStats, setCurrentStats] = useState<ServerStats | null>(null);
+
+  // SFTP Info State
+  const [sftpInfo, setSftpInfo] = useState<SftpDetails | null>(null);
+  const [sftpCopied, setSftpCopied] = useState(false);
+
+  // Egg Reinstall State
+  const [isReinstalling, setIsReinstalling] = useState(false);
+  const [reinstallModalOpen, setReinstallModalOpen] = useState(false);
+  const [reinstallMsg, setReinstallMsg] = useState<string | null>(null);
+
+  // Poll Real-Time Resource Stats and SFTP Info
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStats = () => {
+      fetch(`/api/servers/${server.id}/stats`)
+        .then((res) => res.json())
+        .then((stats: ServerStats) => {
+          if (!isMounted) return;
+          setCurrentStats(stats);
+          if (typeof stats.cpuPct === 'number') {
+            setCpuHistory((prev) => [...prev.slice(-29), stats.cpuPct]);
+          }
+          if (typeof stats.ramUsedPct === 'number') {
+            setRamHistory((prev) => [...prev.slice(-29), stats.ramUsedPct]);
+          }
+          if (typeof stats.networkRxBytes === 'number') {
+            const netKbs = Math.round(stats.networkRxBytes / 1024);
+            setNetRxHistory((prev) => [...prev.slice(-29), netKbs]);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 2500);
+
+    fetch(`/api/servers/${server.id}/sftp-info`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted) setSftpInfo(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [server.id]);
 
   // Minecraft Engine Switcher Modal State
   const [showEngineModal, setShowEngineModal] = useState(false);
@@ -251,16 +321,52 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
     setIsCloning(true);
     setCloneMsg(null);
     try {
+      const token = localStorage.getItem('gh_token');
       const res = await fetch(`/api/servers/${server.id}/clone`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Cloning failed');
       setCloneMsg(`Cloned successfully as "${data.server.name}"! Return to cluster dashboard to manage it.`);
+      if (onServerAdded && data.server) {
+        onServerAdded(data.server);
+      }
     } catch (err: any) {
       setCloneMsg(`Cloning error: ${err.message}`);
     } finally {
       setIsCloning(false);
+    }
+  };
+
+  const handleTriggerReinstall = async () => {
+    setIsReinstalling(true);
+    setReinstallMsg('Executing Pterodactyl egg installation container...');
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(`/api/servers/${server.id}/reinstall`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Reinstallation failed');
+      setReinstallMsg(data.message || 'Reinstallation completed!');
+      if (data.server) {
+        onUpdateServer(data.server);
+      }
+      setTimeout(() => {
+        setReinstallModalOpen(false);
+        setActiveTab('console');
+      }, 1500);
+    } catch (err: any) {
+      setReinstallMsg(`Error: ${err.message}`);
+    } finally {
+      setIsReinstalling(false);
     }
   };
 
@@ -411,41 +517,76 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Hardware Gauges */}
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-white text-sm">Resource Allocation</h3>
+        <div className="space-y-6">
+          {/* Live Telemetry Graphs Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <ResourceGraph
+              title="CPU Thread Load"
+              subtitle="Active container vCPU load"
+              data={cpuHistory}
+              currentValue={currentStats ? currentStats.cpuPct : server.cpuUsagePct}
+              unit="%"
+              maxScale={100}
+              colorScheme="indigo"
+              icon={<Cpu className="w-4 h-4 text-indigo-400" />}
+            />
+            <ResourceGraph
+              title="RAM Memory Footprint"
+              subtitle={`${((server.ramAllocatedGb * (currentStats ? currentStats.ramUsedPct : server.ramUsagePct)) / 100).toFixed(1)} GB of ${server.ramAllocatedGb} GB`}
+              data={ramHistory}
+              currentValue={currentStats ? currentStats.ramUsedPct : server.ramUsagePct}
+              unit="%"
+              maxScale={100}
+              colorScheme="blue"
+              icon={<HardDrive className="w-4 h-4 text-sky-400" />}
+            />
+            <ResourceGraph
+              title="Network Inbound (Rx)"
+              subtitle="Live container socket ingress"
+              data={netRxHistory}
+              currentValue={currentStats ? Math.round(currentStats.networkRxBytes / 1024) : 145}
+              unit="KB/s"
+              maxScale={1000}
+              colorScheme="emerald"
+              icon={<Network className="w-4 h-4 text-emerald-400" />}
+            />
+          </div>
 
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">RAM Memory</span>
-                  <span className="font-semibold text-indigo-300 font-mono">
-                    {((server.ramAllocatedGb * server.ramUsagePct) / 100).toFixed(1)} GB / {server.ramAllocatedGb} GB
-                  </span>
-                </div>
-                <div className="w-full bg-slate-950 h-2 rounded-full border border-slate-800 overflow-hidden">
-                  <div
-                    className="bg-indigo-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${server.ramUsagePct}%` }}
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Hardware Gauges */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-bold text-white text-sm">Resource Allocation</h3>
 
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">CPU Container Load</span>
-                  <span className="font-semibold text-purple-300 font-mono">{server.cpuUsagePct}%</span>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">RAM Memory</span>
+                    <span className="font-semibold text-indigo-300 font-mono">
+                      {((server.ramAllocatedGb * (currentStats ? currentStats.ramUsedPct : server.ramUsagePct)) / 100).toFixed(1)} GB / {server.ramAllocatedGb} GB
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full border border-slate-800 overflow-hidden">
+                    <div
+                      className="bg-indigo-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${currentStats ? currentStats.ramUsedPct : server.ramUsagePct}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-slate-950 h-2 rounded-full border border-slate-800 overflow-hidden">
-                  <div
-                    className="bg-purple-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${server.cpuUsagePct}%` }}
-                  />
+
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">CPU Container Load</span>
+                    <span className="font-semibold text-purple-300 font-mono">{currentStats ? currentStats.cpuPct : server.cpuUsagePct}%</span>
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full border border-slate-800 overflow-hidden">
+                    <div
+                      className="bg-purple-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${currentStats ? currentStats.cpuPct : server.cpuUsagePct}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
           {/* Connection Info */}
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
@@ -546,6 +687,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {activeTab === 'console' && (
@@ -636,7 +778,51 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
       )}
 
       {activeTab === 'files' && (
-        <FileExplorer serverId={server.id} serverName={server.name} />
+        <div className="space-y-4">
+          {/* Wings SFTP Connection Details Banner */}
+          {sftpInfo && (
+            <div className="bg-[#161922] border border-sky-500/20 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-xl">
+                  <HardDriveDownload className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-white">Wings SFTP Remote Access</span>
+                    <span className="text-[10px] bg-sky-500/20 text-sky-300 font-mono px-2 py-0.5 rounded-full border border-sky-500/30">Port {sftpInfo.port}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Connect directly via <strong className="text-slate-200">FileZilla</strong>, <strong className="text-slate-200">WinSCP</strong>, or <strong className="text-slate-200">Cyberduck</strong> with your panel account password.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-white/5 text-slate-300">
+                  <span className="text-slate-500 text-[10px] block uppercase font-sans font-bold">Host</span>
+                  <span>{sftpInfo.host}</span>
+                </div>
+                <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-white/5 text-slate-300">
+                  <span className="text-slate-500 text-[10px] block uppercase font-sans font-bold">Username</span>
+                  <span className="text-sky-300">{sftpInfo.usernameFormat}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    handleCopy(`sftp://${sftpInfo.usernameFormat}@${sftpInfo.host}:${sftpInfo.port}`);
+                    setSftpCopied(true);
+                    setTimeout(() => setSftpCopied(false), 2000);
+                  }}
+                  className="px-3.5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-sky-600/20 transition cursor-pointer flex items-center space-x-1.5"
+                >
+                  {sftpCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{sftpCopied ? 'Copied' : 'Copy SFTP URL'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <FileExplorer serverId={server.id} serverName={server.name} />
+        </div>
       )}
 
       {activeTab === 'schedules' && (
@@ -767,6 +953,63 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
               </div>
             )}
           </div>
+
+          {/* Pterodactyl Egg Installation Script Runner */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Pterodactyl Egg Installation Script Runner</h3>
+                  <p className="text-xs text-slate-400">
+                    Spawns an isolated egg installer container to pull fresh dependencies, SteamCMD binaries, and prepare volumes.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setReinstallModalOpen(true)}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 rounded-xl text-xs font-bold transition shadow-lg shadow-purple-600/20 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reinstall Server</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SFTP Remote Credentials Card */}
+          {sftpInfo && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-400">
+                  <HardDriveDownload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Wings SFTP Connection Details</h3>
+                  <p className="text-xs text-slate-400">
+                    Use these credentials in FileZilla, WinSCP, or Cyberduck to upload multi-gigabyte mods, maps, and worlds.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs pt-2">
+                <div className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                  <span className="text-slate-500 text-[10px] uppercase font-sans font-bold block mb-1">Host & Port</span>
+                  <span className="text-slate-200">{sftpInfo.host}:{sftpInfo.port}</span>
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                  <span className="text-slate-500 text-[10px] uppercase font-sans font-bold block mb-1">Username</span>
+                  <span className="text-sky-300">{sftpInfo.usernameFormat}</span>
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                  <span className="text-slate-500 text-[10px] uppercase font-sans font-bold block mb-1">Password</span>
+                  <span className="text-slate-400 font-sans italic">Your panel password</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -857,6 +1100,57 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-2xl shadow-[0_0_20px_rgba(99,102,241,0.35)] transition cursor-pointer flex items-center justify-center space-x-2"
               >
                 <span>{isSwitchingEngine ? 'Switching Software & Fetching Base Files...' : `Apply Switch to ${targetEngine} ${targetVersion}`}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EGG REINSTALLATION CONFIRMATION MODAL */}
+      {reinstallModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0A0B10]/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0F1117] border border-white/10 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-5">
+            <div className="flex items-center space-x-3 text-purple-400">
+              <div className="p-2.5 bg-purple-600/20 rounded-xl">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Reinstall Game Server</h3>
+                <p className="text-xs text-slate-400">Pterodactyl Egg Installation Script Runner</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This will execute the official egg installer script in an ephemeral container for <strong className="text-white">{server.name}</strong>, downloading required game binaries into the volume.
+            </p>
+
+            {reinstallMsg && (
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono">
+                {reinstallMsg}
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                disabled={isReinstalling}
+                onClick={() => setReinstallModalOpen(false)}
+                className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isReinstalling}
+                onClick={handleTriggerReinstall}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/20 transition disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
+              >
+                {isReinstalling ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Running Installer...</span>
+                  </>
+                ) : (
+                  <span>Execute Installer Script</span>
+                )}
               </button>
             </div>
           </div>

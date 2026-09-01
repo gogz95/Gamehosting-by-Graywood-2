@@ -654,5 +654,69 @@ sbox_godmode 0
       MAXPLAYERS: '24'
     },
     features: ['Steam Workshop Collections', 'TTT & Prop Hunt Ready', 'Lua Script Sandbox', 'RCON Remote Control']
+  },
+  {
+    id: 'pterodactyl-java-21',
+    name: 'Pterodactyl Java 21 Yolks',
+    gameKey: 'pterodactyl_java',
+    category: 'Sandbox',
+    description: 'Official Pterodactyl Yolks Java 21 runtime container. Optimized for modern Paper, Purpur, Folia, and Fabric modded servers with non-root security.',
+    icon: 'Boxes',
+    banner: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 25565,
+    queryPort: 25565,
+    rconPort: 25575,
+    protocol: 'TCP',
+    defaultRamGb: 6,
+    minRamGb: 2,
+    defaultCpuCores: 2,
+    dockerImage: 'ghcr.io/pterodactyl/yolks:java_21',
+    proxyTypeDefault: 'VELOCITY',
+    recommendedSubdomainPrefix: 'mc-yolks',
+    configFiles: [
+      {
+        filename: 'server.properties',
+        description: 'Server properties file',
+        defaultContent: 'server-port=25565\nmotd=Powered by Pterodactyl Yolks on GameHost\n'
+      }
+    ],
+    defaultEnvVars: {
+      SERVER_JARFILE: 'server.jar',
+      STARTUP: 'java -Xms128M -XX:MaxRAMPercentage=95.0 -jar {{SERVER_JARFILE}}',
+      P_SERVER_LOCATION: 'Frankfurt',
+      P_SERVER_UUID: 'node-yolks'
+    },
+    features: ['Pterodactyl Yolks Native', 'Java 21 LTS', 'Aikar Flags Compatible', 'Non-Root Container User']
+  },
+  {
+    id: 'pterodactyl-steamcmd',
+    name: 'Pterodactyl SteamCMD Yolks',
+    gameKey: 'pterodactyl_steamcmd',
+    category: 'Survival',
+    description: 'Official Pterodactyl Yolks SteamCMD runtime container. Automatically installs, validates, and runs dedicated Steam games (Valheim, Palworld, Rust, Ark, CS2).',
+    icon: 'Boxes',
+    banner: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80',
+    defaultPort: 27015,
+    queryPort: 27015,
+    protocol: 'BOTH',
+    defaultRamGb: 8,
+    minRamGb: 4,
+    defaultCpuCores: 4,
+    dockerImage: 'ghcr.io/pterodactyl/yolks:steamcmd',
+    proxyTypeDefault: 'NGINX',
+    recommendedSubdomainPrefix: 'steam-srv',
+    configFiles: [
+      {
+        filename: 'startup.sh',
+        description: 'Container startup launch script',
+        defaultContent: '#!/bin/bash\necho "Starting SteamCMD server..."\n'
+      }
+    ],
+    defaultEnvVars: {
+      AUTO_UPDATE: '1',
+      STEAM_USER: 'anonymous',
+      STARTUP: './server_executable'
+    },
+    features: ['Pterodactyl Yolks SteamCMD', 'Automatic Steam Validation', 'Cross-Game Support', 'Multi-Arch OCI']
   }
 ];

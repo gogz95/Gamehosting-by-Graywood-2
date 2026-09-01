@@ -175,10 +175,30 @@ export const DeployModal: React.FC<DeployModalProps> = ({
 
     setCreatedServer(newServer);
 
-    // Dispatch real container deployment to backend
+    // Initial deployment steps
+    const step1 = setTimeout(() => {
+      setDeploymentLogs((prev) => [...prev, `[1/6] Allocating container hardware resources on ${selectedNode.name}...`]);
+      setDeployProgressPct(20);
+    }, 400);
+    const step2 = setTimeout(() => {
+      setDeploymentLogs((prev) => [...prev, `[2/6] Pulling OCI image "${selectedGame.dockerImage}"...`]);
+      setDeployProgressPct(45);
+    }, 900);
+    const step3 = setTimeout(() => {
+      setDeploymentLogs((prev) => [...prev, `[3/6] Generating game configs & initializing volume directory...`]);
+      setDeployProgressPct(65);
+    }, 1500);
+
+    deployTimersRef.current.push(step1, step2, step3);
+
+    // Dispatch real container deployment to backend and await confirmation
+    const token = localStorage.getItem('gh_token');
     fetch('/api/docker/deploy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({
         serverName: serverName || `${selectedGame.name} Server`,
         gameId: selectedGame.id,
@@ -196,37 +216,40 @@ export const DeployModal: React.FC<DeployModalProps> = ({
         }
       })
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Deployment failed with status ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
         if (data.containerId) {
           newServer.dockerContainerId = data.containerId;
           newServer.isLiveContainer = Boolean(data.isLive);
         }
+
+        setDeploymentLogs((prev) => [
+          ...prev,
+          `[4/6] Creating bridge network and binding port ${selectedGame.defaultPort} (${selectedGame.protocol})...`,
+          `[5/6] Injecting ${proxyEngine} reverse proxy rule for ${fullDomain}...`,
+          `[6/6] Let's Encrypt SSL verified. Server container running healthy! (Container: ${data.containerId || 'Active'})`
+        ]);
+        setDeployProgressPct(100);
+        setIsDeploying(false);
+        setDeploymentComplete(true);
+        setCreatedServer({ ...newServer });
+        onServerDeployed(newServer);
       })
-      .catch(() => {});
-
-    // Simulated log build stream
-    const steps = [
-      { text: `[1/6] Allocating container hardware resources on ${selectedNode.name}...`, delay: 600, pct: 15 },
-      { text: `[2/6] Pulling OCI image "${selectedGame.dockerImage}"...`, delay: 1200, pct: 35 },
-      { text: `[3/6] Generating game configs & setting max players to ${maxPlayers}...`, delay: 1800, pct: 55 },
-      { text: `[4/6] Creating bridge network and binding port ${selectedGame.defaultPort} (${selectedGame.protocol})...`, delay: 2400, pct: 75 },
-      { text: `[5/6] Injecting ${proxyEngine} reverse proxy rule for ${fullDomain}...`, delay: 3000, pct: 90 },
-      { text: `[6/6] Let's Encrypt SSL verified. Server container running healthy!`, delay: 3600, pct: 100 }
-    ];
-
-    steps.forEach((s) => {
-      const timer = setTimeout(() => {
-        setDeploymentLogs((prev) => [...prev, s.text]);
-        setDeployProgressPct(s.pct);
-        if (s.pct === 100) {
-          setIsDeploying(false);
-          setDeploymentComplete(true);
-          onServerDeployed(newServer);
-        }
-      }, s.delay);
-      deployTimersRef.current.push(timer);
-    });
+      .catch((err: any) => {
+        setDeploymentLogs((prev) => [
+          ...prev,
+          `[ERROR]: Container provisioning failed: ${err.message}`,
+          `[FALLBACK]: Initialized server in simulated cluster mode.`
+        ]);
+        setDeployProgressPct(100);
+        setIsDeploying(false);
+        setDeploymentComplete(true);
+        setCreatedServer({ ...newServer });
+        onServerDeployed(newServer);
+      });
   };
 
   const copyDomain = () => {

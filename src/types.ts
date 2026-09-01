@@ -31,6 +31,23 @@ export interface GameTemplate {
   }[];
   defaultEnvVars: Record<string, string>;
   features: string[];
+  installScript?: {
+    container: string;
+    entrypoint: string;
+    script: string;
+  };
+}
+
+export interface ServerStats {
+  cpuPct: number;
+  ramUsedBytes: number;
+  ramLimitBytes: number;
+  ramUsedPct: number;
+  networkRxBytes: number;
+  networkTxBytes: number;
+  diskReadBytes?: number;
+  diskWriteBytes?: number;
+  timestamp: number;
 }
 
 export interface PlayerInfo {

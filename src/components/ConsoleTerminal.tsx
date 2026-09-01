@@ -108,9 +108,10 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({
         rconPassword,
         host: hostIp
       }));
+    } else {
+      onSendCommand(trimmed);
     }
 
-    onSendCommand(trimmed);
     setCommandInput('');
   };
 
@@ -144,8 +145,9 @@ export const ConsoleTerminal: React.FC<ConsoleTerminalProps> = ({
         rconPassword,
         host: hostIp
       }));
+    } else {
+      onSendCommand(macro);
     }
-    onSendCommand(macro);
   };
 
   const handleClearTerminal = () => {

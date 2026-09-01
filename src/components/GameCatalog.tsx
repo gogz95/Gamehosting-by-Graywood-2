@@ -7,6 +7,39 @@ interface GameCatalogProps {
   onSelectGameForDeploy: (gameTemplate: GameTemplate) => void;
 }
 
+const PTERODACTYL_EGG_PRESETS = [
+  {
+    name: 'Minecraft (Paper)',
+    desc: 'Paper high-performance Minecraft Java server with Java 21 Yolks',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/minecraft/java/paper/egg-paper.json'
+  },
+  {
+    name: 'Palworld Dedicated',
+    desc: 'Palworld SteamCMD dedicated server with multi-core performance',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/steamcmd_servers/palworld/egg-palworld.json'
+  },
+  {
+    name: 'Rust Dedicated',
+    desc: 'Rust survival multiplayer server with Oxide mod support',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/steamcmd_servers/rust/egg-rust.json'
+  },
+  {
+    name: 'Satisfactory Dedicated',
+    desc: 'Satisfactory automation factory server with UDP proxying',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/steamcmd_servers/satisfactory/egg-satisfactory.json'
+  },
+  {
+    name: 'Project Zomboid',
+    desc: 'Hardcore isometric zombie apocalypse survival multiplayer server',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/steamcmd_servers/project_zomboid/egg-project-zomboid.json'
+  },
+  {
+    name: 'Enshrouded',
+    desc: 'Co-op voxel action-RPG server by Keen Games',
+    url: 'https://raw.githubusercontent.com/parkervcp/eggs/master/game_eggs/steamcmd_servers/enshrouded/egg-enshrouded.json'
+  }
+];
+
 export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -14,7 +47,8 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
 
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importMode, setImportMode] = useState<'JSON' | 'FORM'>('JSON');
+  const [importMode, setImportMode] = useState<'EGG_URL' | 'JSON' | 'FORM'>('EGG_URL');
+  const [eggUrlInput, setEggUrlInput] = useState('');
   const [jsonInput, setJsonInput] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,6 +86,38 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
 
     return matchesSearch && matchesCategory;
   });
+
+  const handleImportEggUrl = async (urlToFetch?: string) => {
+    const targetUrl = (urlToFetch || eggUrlInput).trim();
+    setImportError(null);
+    if (!targetUrl) {
+      setImportError('Please enter a valid GitHub or HTTP URL to a Pterodactyl egg JSON.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await fetch('/api/templates/import-egg-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to import egg');
+      }
+
+      if (data.template) {
+        setTemplates((prev) => [data.template, ...prev]);
+        setIsImportModalOpen(false);
+        setEggUrlInput('');
+      }
+    } catch (err: any) {
+      setImportError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleImportJson = async () => {
     setImportError(null);
@@ -326,14 +392,22 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
             </div>
 
             {/* Mode Switcher */}
-            <div className="flex bg-[#161922] p-1 rounded-xl border border-white/5">
+            <div className="flex bg-[#161922] p-1 rounded-xl border border-white/5 gap-1">
+              <button
+                onClick={() => setImportMode('EGG_URL')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                  importMode === 'EGG_URL' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                1-Click Egg Presets / URL
+              </button>
               <button
                 onClick={() => setImportMode('JSON')}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
                   importMode === 'JSON' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Pterodactyl Egg JSON
+                Raw Egg JSON
               </button>
               <button
                 onClick={() => setImportMode('FORM')}
@@ -341,7 +415,7 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
                   importMode === 'FORM' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Quick Container Form
+                Custom Container
               </button>
             </div>
 
@@ -352,7 +426,53 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({ onSelectGameForDeploy 
               </div>
             )}
 
-            {importMode === 'JSON' ? (
+            {importMode === 'EGG_URL' ? (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Pterodactyl Egg GitHub / Raw URL</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={eggUrlInput}
+                      onChange={(e) => setEggUrlInput(e.target.value)}
+                      placeholder="https://raw.githubusercontent.com/parkervcp/eggs/master/..."
+                      className="flex-1 bg-[#161922] border border-white/10 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono focus:outline-none focus:border-blue-500/50"
+                    />
+                    <button
+                      onClick={() => handleImportEggUrl()}
+                      disabled={isSubmitting}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
+                    >
+                      {isSubmitting ? 'Fetching...' : 'Import'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Or select a community Egg preset (parkervcp/eggs):
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {PTERODACTYL_EGG_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleImportEggUrl(preset.url)}
+                        disabled={isSubmitting}
+                        className="text-left p-2.5 bg-[#161922] hover:bg-blue-600/10 hover:border-blue-500/30 border border-white/5 rounded-xl transition cursor-pointer group"
+                      >
+                        <div className="font-bold text-xs text-white group-hover:text-blue-300 transition">
+                          {preset.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 line-clamp-2 mt-0.5">
+                          {preset.desc}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : importMode === 'JSON' ? (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-300">Paste Egg JSON Specification</label>

@@ -165,20 +165,36 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
           setCaptureStage('Streaming encrypted blob to S3 Bucket...');
 
           const targetServer = servers.find((s) => s.id === snapshotServerId);
+          const token = localStorage.getItem('gh_token');
           fetch('/api/backups/upload', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({
               serverId: snapshotServerId,
               serverName: targetServer?.name,
               bucketName: 'game-saves-vault-frankfurt'
             })
-          }).catch(() => {});
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.snapshot) {
+                // If backend provided registered snapshot, use it
+                onTakeSnapshot(snapshotServerId, data.snapshot.name);
+              } else {
+                const name = snapshotCustomName || `${targetServer?.gameId || 'game'}-manual-save-${Date.now().toString(36)}.tar.gz`;
+                onTakeSnapshot(snapshotServerId, name);
+              }
+            })
+            .catch(() => {
+              const name = snapshotCustomName || `${targetServer?.gameId || 'game'}-manual-save-${Date.now().toString(36)}.tar.gz`;
+              onTakeSnapshot(snapshotServerId, name);
+            });
 
           const t4 = setTimeout(() => {
             setCaptureProgress(100);
-            const name = snapshotCustomName || `${targetServer?.gameId || 'game'}-manual-save-${Date.now().toString(36)}.tar.gz`;
-            onTakeSnapshot(snapshotServerId, name);
             setIsCapturing(false);
             setIsSnapshotModalOpen(false);
             setSnapshotCustomName('');
@@ -193,11 +209,20 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     backupTimersRef.current.push(t1);
   };
 
-  // Trigger Restore simulation
+  // Trigger Real Restore
   const handleConfirmRestore = () => {
     if (!restoringSnapshot) return;
     setIsRestoring(true);
     setRestoreProgress(20);
+
+    const token = localStorage.getItem('gh_token');
+    fetch(`/api/backups/${restoringSnapshot.snapshot.id}/restore`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    }).catch(() => {});
 
     const r1 = setTimeout(() => {
       setRestoreProgress(60);

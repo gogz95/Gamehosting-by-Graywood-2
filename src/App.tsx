@@ -53,7 +53,10 @@ export default function App() {
 
   // Initial fetch of persistent cluster state from backend database
   useEffect(() => {
-    fetch('/api/servers')
+    const token = localStorage.getItem('gh_token');
+    const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    fetch('/api/servers', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data.servers && Array.isArray(data.servers) && data.servers.length > 0) {
@@ -62,7 +65,7 @@ export default function App() {
       })
       .catch(() => {});
 
-    fetch('/api/proxies')
+    fetch('/api/proxies', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
@@ -441,6 +444,7 @@ export default function App() {
             onBack={() => setSelectedServer(null)}
             onUpdateServer={handleUpdateServer}
             onDeleteServer={handleDeleteServer}
+            onServerAdded={handleServerDeployed}
           />
         ) : (
           <>
