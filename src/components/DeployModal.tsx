@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Rocket, Server, Network, ShieldCheck, CheckCircle2, Cpu, HardDrive, Lock, Terminal, ArrowRight, ArrowLeft, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
+import { X, Rocket, Server, Network, ShieldCheck, CheckCircle2, Cpu, HardDrive, Lock, Terminal, ArrowRight, ArrowLeft, RefreshCw, Copy, Check, AlertTriangle, Sparkles } from 'lucide-react';
 import { GAME_TEMPLATES } from '../data/gameTemplates';
 import { GameTemplate, HostNode, ProxyEngine, DeployedServer } from '../types';
 
@@ -42,6 +42,8 @@ export const DeployModal: React.FC<DeployModalProps> = ({
   const [adminPassword, setAdminPassword] = useState('AdminPass2026!');
   const [maxPlayers, setMaxPlayers] = useState(20);
   const [worldName, setWorldName] = useState('NewWorld');
+  const [minecraftType, setMinecraftType] = useState('PAPER');
+  const [minecraftVersion, setMinecraftVersion] = useState('1.21.1');
 
   // Deployment Stream state
   const [isDeploying, setIsDeploying] = useState(false);
@@ -156,6 +158,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
       ramUsagePct: 24,
       envVars: {
         ...selectedGame.defaultEnvVars,
+        ...(selectedGame.id === 'minecraft-java' ? { TYPE: minecraftType, VERSION: minecraftVersion } : {}),
         MAX_PLAYERS: String(maxPlayers),
         WORLD_NAME: worldName,
         ADMIN_PASS: adminPassword
@@ -186,6 +189,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
         nodeId: selectedNode.id,
         envVars: {
           ...selectedGame.defaultEnvVars,
+          ...(selectedGame.id === 'minecraft-java' ? { TYPE: minecraftType, VERSION: minecraftVersion } : {}),
           MAX_PLAYERS: String(maxPlayers),
           WORLD_NAME: worldName,
           ADMIN_PASS: adminPassword
@@ -559,12 +563,80 @@ export const DeployModal: React.FC<DeployModalProps> = ({
                 />
               </div>
 
+              {/* Minecraft Specific Server Type & Version Selector */}
+              {selectedGame.id === 'minecraft-java' && (
+                <div className="space-y-3 p-4 bg-indigo-950/20 border border-indigo-500/30 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center space-x-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Minecraft Server Software &amp; Type</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Choose your server engine. Base server jar and configs are auto-fetched on deployment.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[11px] text-slate-400 font-bold">Version:</span>
+                      <select
+                        value={minecraftVersion}
+                        onChange={(e) => setMinecraftVersion(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 text-indigo-300 font-mono text-xs font-bold rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
+                      >
+                        <option value="1.21.1">1.21.1 (Latest)</option>
+                        <option value="1.21">1.21</option>
+                        <option value="1.20.4">1.20.4 (Recommended)</option>
+                        <option value="1.20.2">1.20.2</option>
+                        <option value="1.19.4">1.19.4</option>
+                        <option value="1.18.2">1.18.2</option>
+                        <option value="1.16.5">1.16.5 (Nether)</option>
+                        <option value="1.12.2">1.12.2 (Legacy Modded)</option>
+                        <option value="1.8.9">1.8.9 (Combat PvP)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: 'PAPER', name: 'Paper', desc: 'High-performance plugin server', badge: 'Popular' },
+                      { id: 'PURPUR', name: 'Purpur', desc: 'Deep custom gameplay & entity flags', badge: 'Customizable' },
+                      { id: 'SPIGOT', name: 'Spigot', desc: 'Classic Bukkit/Spigot plugins', badge: 'Classic' },
+                      { id: 'FABRIC', name: 'Fabric', desc: 'Lightweight modern mod loader', badge: 'Fast Mods' },
+                      { id: 'FORGE', name: 'Forge', desc: 'CurseForge tech/magic modpacks', badge: 'Heavy Mods' },
+                      { id: 'NEOFORGE', name: 'NeoForge', desc: 'Next-gen modern Forge fork', badge: '1.20.4+' },
+                      { id: 'VANILLA', name: 'Vanilla', desc: 'Pure official Mojang server', badge: 'Official' },
+                      { id: 'FOLIA', name: 'Folia', desc: 'Multi-threaded regional concurrency', badge: '100+ Players' },
+                      { id: 'VELOCITY', name: 'Velocity', desc: 'Ultra low latency proxy network', badge: 'Proxy' },
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setMinecraftType(st.id)}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                          minecraftType === st.id
+                            ? 'bg-indigo-600/30 border-indigo-500 text-white shadow-md'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-white">{st.name}</span>
+                          <span className="text-[9px] px-1.5 py-0.2 bg-white/10 rounded font-mono text-indigo-300">{st.badge}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 line-clamp-1 mt-1">{st.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Summary box before deployment */}
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2 text-xs">
                 <div className="font-semibold text-slate-200 mb-2">Deployment Summary</div>
                 <div className="flex justify-between text-slate-400">
                   <span>Game:</span>
-                  <span className="text-slate-200 font-medium">{selectedGame.name}</span>
+                  <span className="text-slate-200 font-medium">
+                    {selectedGame.name} {selectedGame.id === 'minecraft-java' ? `(${minecraftType} ${minecraftVersion})` : ''}
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Connection Address:</span>

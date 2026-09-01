@@ -56,6 +56,13 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   const [isCloning, setIsCloning] = useState(false);
   const [cloneMsg, setCloneMsg] = useState<string | null>(null);
 
+  // Minecraft Engine Switcher Modal State
+  const [showEngineModal, setShowEngineModal] = useState(false);
+  const [targetEngine, setTargetEngine] = useState(server.envVars?.TYPE || 'PAPER');
+  const [targetVersion, setTargetVersion] = useState(server.envVars?.VERSION || '1.20.4');
+  const [isSwitchingEngine, setIsSwitchingEngine] = useState(false);
+  const [engineSwitchSuccess, setEngineSwitchSuccess] = useState<string | null>(null);
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -98,6 +105,33 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
       ]
     };
     onUpdateServer(updated);
+  };
+
+  const handleSwitchEngine = async () => {
+    setIsSwitchingEngine(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/minecraft/type`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: targetEngine,
+          version: targetVersion
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.server) {
+        onUpdateServer(data.server);
+        setEngineSwitchSuccess(`Switched server to ${targetEngine} ${targetVersion}!`);
+        setTimeout(() => {
+          setShowEngineModal(false);
+          setEngineSwitchSuccess(null);
+        }, 1500);
+      }
+    } catch (err: any) {
+      alert(`Failed to switch engine: ${err.message}`);
+    } finally {
+      setIsSwitchingEngine(false);
+    }
   };
 
   const handleSendCommand = (cmd: string) => {
@@ -268,6 +302,20 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
               <p className="text-xs text-slate-400 mt-1">
                 {server.gameName} • Deployed on {server.nodeName}
               </p>
+              {server.gameId?.toLowerCase().includes('minecraft') && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-mono font-bold rounded-lg flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Engine: {server.envVars?.TYPE || 'PAPER'} ({server.envVars?.VERSION || '1.20.4'})</span>
+                  </span>
+                  <button
+                    onClick={() => setShowEngineModal(true)}
+                    className="px-2.5 py-1 bg-[#161922] hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    Switch Software
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -718,6 +766,99 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                 {cloneMsg}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MINECRAFT ENGINE SWITCHER MODAL */}
+      {showEngineModal && (
+        <div className="fixed inset-0 z-50 bg-[#0A0B10]/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0F1117] border border-white/10 rounded-3xl p-6 sm:p-8 w-full max-w-xl shadow-2xl space-y-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-extrabold text-white text-lg flex items-center space-x-2">
+                  <Sparkles className="w-5 h-5 text-indigo-400" />
+                  <span>Switch Minecraft Server Engine</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Transition this server between plugin, modded, or proxy engines without wiping world saves.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowEngineModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {engineSwitchSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-xl text-xs font-bold flex items-center space-x-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>{engineSwitchSuccess}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Minecraft Version</label>
+                <select
+                  value={targetVersion}
+                  onChange={(e) => setTargetVersion(e.target.value)}
+                  className="w-full bg-[#161922] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-indigo-300 font-mono font-bold focus:outline-none cursor-pointer"
+                >
+                  <option value="1.21.1">1.21.1 (Latest)</option>
+                  <option value="1.21">1.21</option>
+                  <option value="1.20.4">1.20.4 (Recommended)</option>
+                  <option value="1.20.2">1.20.2</option>
+                  <option value="1.19.4">1.19.4</option>
+                  <option value="1.18.2">1.18.2</option>
+                  <option value="1.16.5">1.16.5 (Nether)</option>
+                  <option value="1.12.2">1.12.2 (Legacy Modded)</option>
+                  <option value="1.8.9">1.8.9 (Combat PvP)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Server Software</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'PAPER', name: 'Paper', desc: 'High performance plugins' },
+                    { id: 'PURPUR', name: 'Purpur', desc: 'Deep custom gameplay flags' },
+                    { id: 'SPIGOT', name: 'Spigot', desc: 'Classic Bukkit/Spigot plugins' },
+                    { id: 'FABRIC', name: 'Fabric', desc: 'Lightweight modern mods' },
+                    { id: 'FORGE', name: 'Forge', desc: 'Heavy CurseForge tech mods' },
+                    { id: 'NEOFORGE', name: 'NeoForge', desc: 'Next-gen Forge for 1.20.4+' },
+                    { id: 'VANILLA', name: 'Vanilla', desc: 'Pure Mojang server' },
+                    { id: 'FOLIA', name: 'Folia', desc: 'Multi-threaded 100+ players' },
+                    { id: 'VELOCITY', name: 'Velocity', desc: 'Proxy player router' },
+                  ].map((eng) => (
+                    <button
+                      key={eng.id}
+                      type="button"
+                      onClick={() => setTargetEngine(eng.id)}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                        targetEngine === eng.id
+                          ? 'bg-indigo-600/30 border-indigo-500 text-white shadow-md'
+                          : 'bg-[#161922] border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <span className="font-bold text-xs text-white block">{eng.name}</span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">{eng.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isSwitchingEngine}
+                onClick={handleSwitchEngine}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-2xl shadow-[0_0_20px_rgba(99,102,241,0.35)] transition cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <span>{isSwitchingEngine ? 'Switching Software & Fetching Base Files...' : `Apply Switch to ${targetEngine} ${targetVersion}`}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

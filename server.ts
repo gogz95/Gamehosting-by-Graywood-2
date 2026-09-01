@@ -1135,6 +1135,161 @@ app.delete("/api/proxies/:id", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// REST APIs: Minecraft Server Types & Automated Base File Manager
+// ---------------------------------------------------------------------------
+
+const MINECRAFT_SERVER_TYPES = [
+  {
+    type: "PAPER",
+    name: "Paper",
+    category: "Plugins",
+    badge: "Recommended",
+    description: "High-performance fork of Spigot aiming to fix gameplay and mechanics inconsistencies while improving performance.",
+    features: ["Bukkit / Spigot / Paper Plugins", "Async Chunk Loading", "Anti-Xray Engine"],
+    recommendedVersions: ["1.21.1", "1.21", "1.20.4", "1.19.4", "1.18.2", "1.16.5"],
+    defaultConfig: "paper.yml"
+  },
+  {
+    type: "PURPUR",
+    name: "Purpur",
+    category: "Plugins",
+    badge: "Most Customizable",
+    description: "Drop-in replacement for Paper designed for configurability, fun new gameplay features, and high performance.",
+    features: ["Ridable Mobs", "Deep Gameplay Flags", "Paper Compatibility"],
+    recommendedVersions: ["1.21.1", "1.21", "1.20.4", "1.19.4", "1.16.5"],
+    defaultConfig: "purpur.yml"
+  },
+  {
+    type: "SPIGOT",
+    name: "Spigot",
+    category: "Plugins",
+    badge: "Classic",
+    description: "The classic modified Minecraft server based on CraftBukkit. Broadest compatibility with older plugins.",
+    features: ["Classic Bukkit/Spigot Plugins", "BungeeCord Ready", "Stable Timing API"],
+    recommendedVersions: ["1.21.1", "1.20.4", "1.19.4", "1.16.5", "1.12.2", "1.8.8"],
+    defaultConfig: "spigot.yml"
+  },
+  {
+    type: "FABRIC",
+    name: "Fabric",
+    category: "Mods",
+    badge: "Modern Modded",
+    description: "Lightweight, experimental modding toolchain for Minecraft. Extremely fast startup and low RAM overhead.",
+    features: ["Fabric Mods (.jar)", "Lithium / Sodium Performance", "Rapid Snapshot Updates"],
+    recommendedVersions: ["1.21.1", "1.21", "1.20.4", "1.19.4", "1.18.2"],
+    defaultConfig: "fabric.mod.json"
+  },
+  {
+    type: "FORGE",
+    name: "Forge",
+    category: "Mods",
+    badge: "Heavy Modded",
+    description: "The classic modding platform with the largest ecosystem of tech, magic, and dimension mods.",
+    features: ["CurseForge Modpacks", "Deep Block & Item API", "Custom Dimensions"],
+    recommendedVersions: ["1.20.1", "1.19.2", "1.18.2", "1.16.5", "1.12.2", "1.7.10"],
+    defaultConfig: "forge-server.toml"
+  },
+  {
+    type: "NEOFORGE",
+    name: "NeoForge",
+    category: "Mods",
+    badge: "Next-Gen Modded",
+    description: "Modern, active community fork of Forge for Minecraft 1.20.4+ with cleaner APIs and active developer support.",
+    features: ["Next-Gen Mod Compatibility", "Improved Mod Loading", "Modern Multithreading"],
+    recommendedVersions: ["1.21.1", "1.20.4"],
+    defaultConfig: "neoforge-server.toml"
+  },
+  {
+    type: "VANILLA",
+    name: "Vanilla",
+    category: "Official",
+    badge: "Pure",
+    description: "Pure, unmodified dedicated server software directly from Mojang Studios.",
+    features: ["100% Exact Mojang Physics", "Zero Plugin Modifications", "Official Datapack Support"],
+    recommendedVersions: ["1.21.1", "1.20.4", "1.19.4", "1.16.5"],
+    defaultConfig: "server.properties"
+  },
+  {
+    type: "FOLIA",
+    name: "Folia",
+    category: "High Concurrency",
+    badge: "Multi-Threaded",
+    description: "Paper fork that splits the game into independent ticking regions across CPU threads for 100+ player concurrency.",
+    features: ["Multi-Threaded Region Ticking", "Massive Player Counts", "High Core Scaling"],
+    recommendedVersions: ["1.20.4", "1.20.2"],
+    defaultConfig: "folia.yml"
+  },
+  {
+    type: "VELOCITY",
+    name: "Velocity Proxy",
+    category: "Proxy",
+    badge: "Network",
+    description: "Modern, next-generation high-performance Minecraft proxy to link multiple game servers into a network.",
+    features: ["Modern Player Forwarding", "Built-in DDoS Mitigation", "Ultra Low Latency"],
+    recommendedVersions: ["3.3.0"],
+    defaultConfig: "velocity.toml"
+  }
+];
+
+app.get("/api/minecraft/types", (req, res) => {
+  res.json({ types: MINECRAFT_SERVER_TYPES });
+});
+
+// Switch Server Type & Version on the fly
+app.post("/api/servers/:id/minecraft/type", async (req, res) => {
+  const { type, version, maxPlayers, memory } = req.body;
+  const server = db.getServerById(req.params.id);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const envVars = { ...server.envVars };
+  if (type) envVars.TYPE = type.toUpperCase();
+  if (version) envVars.VERSION = version;
+  if (maxPlayers) envVars.MAX_PLAYERS = String(maxPlayers);
+  if (memory) envVars.MEMORY = String(memory);
+
+  // Initialize/ensure base server files in volume
+  const root = resolveServerVolumeRoot(server);
+  if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
+
+  // Auto-accept EULA
+  fs.writeFileSync(path.join(root, "eula.txt"), "eula=true\n", "utf8");
+
+  // Ensure default server.properties
+  const propsPath = path.join(root, "server.properties");
+  if (!fs.existsSync(propsPath)) {
+    fs.writeFileSync(
+      propsPath,
+      `# Minecraft Server Properties\nserver-port=${server.port}\nmax-players=${server.maxPlayers}\nmotd=Powered by GameHost Proxy\n`,
+      "utf8"
+    );
+  }
+
+  // If switched to Paper, Purpur, or Spigot, ensure config files exist
+  if (envVars.TYPE === "PAPER" && !fs.existsSync(path.join(root, "paper.yml"))) {
+    fs.writeFileSync(path.join(root, "paper.yml"), "verbose: false\nconfig-version: 27\n", "utf8");
+  } else if (envVars.TYPE === "PURPUR" && !fs.existsSync(path.join(root, "purpur.yml"))) {
+    fs.writeFileSync(path.join(root, "purpur.yml"), "verbose: false\nconfig-version: 30\n", "utf8");
+  } else if (envVars.TYPE === "SPIGOT" && !fs.existsSync(path.join(root, "spigot.yml"))) {
+    fs.writeFileSync(path.join(root, "spigot.yml"), "config-version: 12\n", "utf8");
+  }
+
+  const updated = db.updateServer(server.id, {
+    envVars,
+    logs: [
+      ...server.logs,
+      {
+        id: Date.now().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        level: "SYSTEM",
+        message: `[Engine Switcher]: Switched Minecraft software to ${envVars.TYPE} (Version ${envVars.VERSION || "latest"}). Base server files initialized.`
+      }
+    ]
+  });
+
+  res.json({ success: true, server: updated });
+});
+
+// ---------------------------------------------------------------------------
 // REST APIs: Game Templates & Custom "Egg" Importer
 // ---------------------------------------------------------------------------
 
