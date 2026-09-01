@@ -1,0 +1,29 @@
+﻿# ==============================================================================
+# GameHost Deployer — Development Dockerfile (hot-reload with tsx)
+# Usage: docker compose -f docker-compose.dev.yml up --build
+# ==============================================================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Runtime tools
+RUN apk add --no-cache docker-cli curl
+
+# Install all dependencies (including devDeps for tsx / TypeScript)
+COPY package.json package-lock.json ./
+COPY server/package.json ./server/
+COPY webapp/package.json ./webapp/
+RUN npm ci
+
+# Source is mounted via bind-mount at runtime (see docker-compose.dev.yml)
+# This COPY is only a fallback for standalone builds
+COPY . .
+
+EXPOSE 3000
+
+ENV NODE_ENV=development
+ENV PORT=3000
+
+# tsx watches .ts files and restarts on change
+CMD ["npx", "tsx", "server.ts"]

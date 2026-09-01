@@ -1,6 +1,7 @@
 {
   "name": "gamehost-deployer-proxy",
   "private": true,
+  "workspaces": ["server", "webapp"],
   "version": "2.5.0",
   "description": "1-Click Game Deployment & Reverse Proxy Routing Engine",
   "type": "module",
@@ -14,7 +15,12 @@
     "build:pkg:linux": "npm run build && npx @yao-pkg/pkg dist/server.cjs --targets node20-linux-x64 --out-path bin/",
     "preview": "vite preview",
     "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true }); try { fs.unlinkSync('server.js'); } catch(e){}\"",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "docker:build": "docker build -t gamehost-panel:latest .",
+    "docker:run": "docker run -p 3000:3000 -v /var/run/docker.sock:/var/run/docker.sock -v gamehost-data:/app/data --rm gamehost-panel:latest",
+    "docker:dev": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:push": "docker compose push"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1122.0",

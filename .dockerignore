@@ -1,0 +1,27 @@
+﻿# Build artifacts
+node_modules
+dist
+bin
+
+# Dev tooling
+.git
+.github
+.gitignore
+.env
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor configs
+.vscode
+.idea
+*.swp
+
+# Test coverage
+coverage
+
+# Scratch and local dev data
+scratch

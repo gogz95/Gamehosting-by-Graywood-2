@@ -1,0 +1,12 @@
+﻿{
+  "name": "gamehost-webapp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "GameHost Deployer - React Web UI",
+  "scripts": {
+    "dev": "vite --config ../vite.config.ts",
+    "build": "vite build --config ../vite.config.ts",
+    "preview": "vite preview --config ../vite.config.ts"
+  }
+}
