@@ -1,0 +1,43 @@
+﻿# ==============================================================================
+# docker-compose.agent.yml — Worker Node Agent Stack
+# Deploy this on each additional Proxmox node that should join the cluster.
+# Prerequisites:
+#   1. Docker Engine running on this node
+#   2. MASTER_URL, ENROLLMENT_TOKEN set in .env or environment
+# ==============================================================================
+
+version: '3.9'
+
+services:
+  gamehost-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: gamehost-agent:latest
+    container_name: gamehost-agent
+    restart: unless-stopped
+
+    volumes:
+      # Give agent access to this node's Docker Engine
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent game server data on this node
+      - /opt/gamehost/data:/agent/data
+
+    environment:
+      # wss:// URL of your GameHost master panel
+      - MASTER_URL=${MASTER_URL}
+      # One-time enrollment token from master panel Settings → Nodes
+      - ENROLLMENT_TOKEN=${ENROLLMENT_TOKEN}
+      # Human-readable name for this node in the cluster UI
+      - NODE_NAME=${NODE_NAME:-proxmox-node}
+      - NODE_ENV=production
+
+    # Agent has no web UI — no ports needed
+    network_mode: host
+
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

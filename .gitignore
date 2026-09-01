@@ -9,3 +9,9 @@ coverage/
 /data/volumes/
 /data/backups/
 /data/*.log
+
+# Nginx TLS certificates (never commit private keys)
+nginx/certs/*.pem
+nginx/certs/*.crt
+nginx/certs/*.key
+

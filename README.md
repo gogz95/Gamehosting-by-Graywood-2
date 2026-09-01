@@ -132,52 +132,62 @@ graph TD
 ## ⚡ Quick Start
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) v20.0.0 or later.
-- [Docker Engine](https://docs.docker.com/engine/install/) or Docker Desktop running locally.
+- [Docker Engine](https://docs.docker.com/engine/install/) v24+ (Linux / Docker Desktop on Windows/Mac)
+- [Node.js](https://nodejs.org/) v20+ *(only needed for native / dev mode)*
 
-### Installation
+---
 
-#### Option A: 1-Click with Docker Compose (Recommended)
+### 🐳 Option A: Docker Compose — Production (Recommended)
 ```bash
-# Clone the repository
 git clone https://github.com/your-username/gamehost-deployer-proxy.git
 cd gamehost-deployer-proxy
-
-# Start master panel with Docker Compose
+cp .env.example .env   # fill in optional keys (Gemini, S3, Discord)
 docker compose up -d
 ```
-The master panel will be available immediately at `http://localhost:3000`.
+Panel live at **`http://localhost:3000`**. Add Nginx + TLS with one command:
+```bash
+./certbot-setup.sh panel.yourdomain.com admin@yourdomain.com
+```
 
-#### Option B: Native Node.js Setup
-1. **Clone the repository**:
+### 🔥 Option B: Docker — Hot-Reload Dev Mode
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+Source files are bind-mounted — `tsx` restarts automatically on save.
+
+### 🖥️ Option C: Proxmox LXC / VM Deployment
+See **[PROXMOX.md](PROXMOX.md)** for a complete step-by-step guide covering:
+- LXC setup with Docker nesting enabled
+- VM alternative
+- Pre-built GHCR image pull
+- Nginx + TLS via Certbot
+- Portainer one-click stack deployment
+
+### ⚙️ Option D: Native Node.js
+1. **Clone & install**:
    ```bash
    git clone https://github.com/your-username/gamehost-deployer-proxy.git
-   cd gamehost-deployer-proxy
+   cd gamehost-deployer-proxy && npm install
    ```
-
-2. **Install dependencies**:
+2. **Configure**: `cp .env.example .env`
+3. **Run**:
    ```bash
-   npm install
+   npm run dev    # development (hot-reload)
+   npm run build  # production bundle
+   npm run start  # serve production bundle
    ```
+4. Open `http://localhost:3000`
 
-3. **Configure Environment Variables**:
-   ```bash
-   cp .env.example .env
-   ```
-   *(Optional: set `GEMINI_API_KEY` for AI crash diagnoses and auto-remediation).*
-
-4. **Build and Run**:
-   ```bash
-   # Development Mode (Vite Hot-Reload + Server)
-   npm run dev
-
-   # Production Build & Start
-   npm run build
-   npm run start
-   ```
-
-5. **Open your browser**:
-   Navigate to `http://localhost:3000` (or `http://localhost:3001` if port 3000 is occupied).
+### 📦 Available npm Scripts
+| Script | Description |
+|---|---|
+| `npm run dev` | TypeScript hot-reload server |
+| `npm run build` | Vite + esbuild production bundle |
+| `npm run start` | Serve production bundle |
+| `npm run docker:build` | Build production Docker image |
+| `npm run docker:run` | Run image directly (no compose) |
+| `npm run docker:dev` | Dev stack with live bind-mount |
+| `npm run docker:down` | Stop compose stack |
 
 ---
 
@@ -199,26 +209,40 @@ The master panel will be available immediately at `http://localhost:3000`.
 
 ## 🌐 Multi-Node Clustering
 
-To run game servers across multiple dedicated servers or VPS instances:
+To run game servers across multiple Proxmox nodes or dedicated servers:
 
-1. **Generate an Enrollment Token on the Master Panel**:
-   In the **Host Nodes** tab, click **"Enroll New Node"** or call the API:
+1. **Generate an Enrollment Token** on the master panel:
+   - UI: **Host Nodes** tab → **"Enroll New Node"**
+   - API: `curl -X POST http://master-ip:3000/api/nodes/enroll`
+   > Response: `{"token": "gh_node_..."}`
+
+2. **Start the Worker Agent** on each remote node:
+
+   **Option A — Docker (recommended):**
    ```bash
-   curl -X POST http://master-ip:3000/api/nodes/enroll
+   # On the worker Proxmox node:
+   docker run -d --restart=unless-stopped \
+     -e MASTER_URL=wss://panel.yourdomain.com \
+     -e ENROLLMENT_TOKEN=gh_node_xxx \
+     -e NODE_NAME="proxmox-node-2" \
+     -v /var/run/docker.sock:/var/run/docker.sock \
+     ghcr.io/your-username/gamehost-deployer-proxy/agent:latest
    ```
-   *Response: `{"token": "gh_node_..."}`*
-
-2. **Start the Worker Agent on the Remote Host**:
-   Copy `agent.ts` and `package.json` to the remote server, then run:
+   Or use the agent compose file:
    ```bash
-   npx tsx agent.ts \
-     --master=ws://master-ip:3000/ws/nodes \
-     --token=YOUR_ENROLLMENT_TOKEN \
-     --name="Frankfurt Dedicated AX102" \
-     --location="Frankfurt, Germany"
+   MASTER_URL=wss://panel.yourdomain.com \
+   ENROLLMENT_TOKEN=gh_node_xxx \
+   NODE_NAME=proxmox-node-2 \
+   docker compose -f docker-compose.agent.yml up -d
    ```
 
-3. The worker node will securely enroll into your cluster and immediately appear in the **Deploy Server** wizard.
+   **Option B — Native (one-liner):**
+   ```bash
+   curl -fsSL http://master-ip:3000/agent.ts | \
+     MASTER_URL=wss://master-ip ENROLLMENT_TOKEN=gh_node_xxx npx tsx -
+   ```
+
+3. The node will securely enroll and immediately appear in the **Deploy Server** wizard.
 
 ---
 
@@ -244,6 +268,26 @@ To run game servers across multiple dedicated servers or VPS instances:
 - **Container Isolation**: Game servers run in unprivileged containers with memory limits (`HostConfig.Memory`) and CPU core constraints.
 
 For security reports, please refer to [SECURITY.md](SECURITY.md).
+
+---
+
+## 🔐 CI/CD — GitHub Secrets Setup
+
+The GitHub Actions workflow auto-builds and pushes the Docker image to GitHub Container Registry (GHCR) on every push to `main`. No secrets are needed for GHCR — it uses the automatic `GITHUB_TOKEN`.
+
+To enable optional features, add these secrets in **GitHub → Settings → Secrets and variables → Actions**:
+
+| Secret | Required For |
+|---|---|
+| *(automatic)* `GITHUB_TOKEN` | GHCR image push — built-in, no setup needed |
+| `DOCKER_USERNAME` | Docker Hub push (optional, see commented section in `ci.yml`) |
+| `DOCKER_PASSWORD` | Docker Hub push |
+
+**Enable package write permissions** (one-time):
+1. Go to your GitHub repo → **Settings** → **Actions** → **General**
+2. Under *Workflow permissions*, select **Read and write permissions**
+3. Save — the next push to `main` will publish the image to:
+   `ghcr.io/YOUR_USERNAME/gamehost-deployer-proxy:latest`
 
 ---
 
