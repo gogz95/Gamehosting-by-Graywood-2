@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # Dockerfile.agent — Lightweight worker node daemon
 # Connects to GameHost master via secure WebSocket, manages local Docker
 # Usage: docker build -f Dockerfile.agent -t gamehost-agent .
@@ -28,12 +28,18 @@ RUN npm install -g tsx
 COPY agent.ts ./
 
 # ─── Environment ────────────────────────────────────────────────────────────
-# Required: full wss:// URL of the GameHost master panel
+# Required: http:// or ws:// URL of your GameHost master panel
+# The agent auto-converts http→ws, so both formats work
 ENV MASTER_URL=""
-# Required: enrollment token issued from the master panel UI
-ENV ENROLLMENT_TOKEN=""
+# Required: enrollment token issued from master panel Settings → Nodes
+# Must match what agent.ts reads via NODE_TOKEN env var
+ENV NODE_TOKEN=""
 # Optional: human-readable name shown in the cluster UI
 ENV NODE_NAME="proxmox-agent"
+# Optional: location label shown in cluster UI
+ENV NODE_LOCATION="Proxmox Cluster"
+# Optional: public IP of this node (auto-detected if blank)
+ENV NODE_IP=""
 ENV NODE_ENV=production
 
 # ─── Health Check ───────────────────────────────────────────────────────────

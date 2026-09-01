@@ -1,4 +1,4 @@
-﻿# GameHost Deployer & Proxy — Proxmox Deployment Guide
+# GameHost Deployer & Proxy — Proxmox Deployment Guide
 
 This guide covers deploying the GameHost master panel on a **Proxmox VE** node using Docker inside an LXC container or a full VM.
 
@@ -80,18 +80,46 @@ cp /etc/letsencrypt/live/YOUR_DOMAIN.COM/privkey.pem  ./nginx/certs/
 docker compose restart nginx
 ```
 
+> **One-command alternative**: `./certbot-setup.sh YOUR_DOMAIN.COM your@email.com` handles all of the above automatically.
+
 ---
 
 ## Worker Agent Nodes
 
-Each additional Proxmox node can run the lightweight agent daemon that connects back to the master panel:
+Each additional Proxmox node runs the lightweight agent daemon that connects back to the master panel via secure WebSocket.
 
+### Option A — Docker (Recommended)
 ```bash
-# One-liner install (run on each worker node):
-curl -fsSL http://<MASTER_IP>:3000/agent.ts | tsx -
+docker run -d --restart=unless-stopped \
+  -e MASTER_URL=http://<MASTER_IP>:3000 \
+  -e NODE_TOKEN=gh_node_xxx \
+  -e NODE_NAME="proxmox-node-2" \
+  -e NODE_LOCATION="Frankfurt, Germany" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/your-username/gamehost-deployer-proxy/agent:latest
 ```
 
-The agent connects via secure WebSocket using an enrollment token issued from the master panel UI.
+Or with Docker Compose (recommended for Portainer):
+```bash
+# Create a minimal .env on the worker node:
+cat > .env <<EOF
+MASTER_URL=http://<MASTER_IP>:3000
+NODE_TOKEN=gh_node_xxx
+NODE_NAME=proxmox-node-2
+NODE_LOCATION=Frankfurt, Germany
+EOF
+
+docker compose -f docker-compose.agent.yml up -d
+```
+
+### Option B — Native one-liner
+```bash
+# Requires Node.js + tsx on the worker node:
+NODE_TOKEN=gh_node_xxx NODE_NAME="proxmox-node-2" \
+  curl -fsSL http://<MASTER_IP>:3000/agent.ts | npx tsx -
+```
+
+The agent registers itself and immediately appears in the master panel **Host Nodes** tab.
 
 ---
 
@@ -105,3 +133,4 @@ The agent connects via secure WebSocket using an enrollment token issued from th
 | `npm run docker:down` | Stop and remove compose stack |
 | `docker compose logs -f` | Tail live logs |
 | `docker compose pull` | Pull latest image from GHCR |
+| `./certbot-setup.sh domain.com email` | Auto-setup Let's Encrypt TLS |

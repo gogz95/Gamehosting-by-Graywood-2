@@ -222,17 +222,19 @@ To run game servers across multiple Proxmox nodes or dedicated servers:
    ```bash
    # On the worker Proxmox node:
    docker run -d --restart=unless-stopped \
-     -e MASTER_URL=wss://panel.yourdomain.com \
-     -e ENROLLMENT_TOKEN=gh_node_xxx \
+     -e MASTER_URL=http://panel.yourdomain.com \
+     -e NODE_TOKEN=gh_node_xxx \
      -e NODE_NAME="proxmox-node-2" \
+     -e NODE_LOCATION="Frankfurt, Germany" \
      -v /var/run/docker.sock:/var/run/docker.sock \
      ghcr.io/your-username/gamehost-deployer-proxy/agent:latest
    ```
    Or use the agent compose file:
    ```bash
-   MASTER_URL=wss://panel.yourdomain.com \
-   ENROLLMENT_TOKEN=gh_node_xxx \
+   MASTER_URL=http://panel.yourdomain.com \
+   NODE_TOKEN=gh_node_xxx \
    NODE_NAME=proxmox-node-2 \
+   NODE_LOCATION="Frankfurt, Germany" \
    docker compose -f docker-compose.agent.yml up -d
    ```
 
